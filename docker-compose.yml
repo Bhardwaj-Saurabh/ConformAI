@@ -1,0 +1,267 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: conformai-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-conformai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-conformai_password}
+      POSTGRES_DB: ${POSTGRES_DB:-conformai}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-conformai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - conformai-network
+
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: conformai-qdrant
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "6334:6334"  # gRPC port
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6333/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - conformai-network
+
+  # Redis (for Celery & Caching)
+  redis:
+    image: redis:7-alpine
+    container_name: conformai-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - conformai-network
+
+  # MinIO (S3-compatible object storage)
+  minio:
+    image: minio/minio:latest
+    container_name: conformai-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"  # Console
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - conformai-network
+
+  # Airflow Webserver
+  airflow-webserver:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
+    container_name: conformai-airflow-webserver
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER:-conformai}:${POSTGRES_PASSWORD:-conformai_password}@postgres:5432/${POSTGRES_DB:-conformai}
+      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://${POSTGRES_USER:-conformai}:${POSTGRES_PASSWORD:-conformai_password}@postgres:5432/${POSTGRES_DB:-conformai}
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY:-FB0o_zt4e3Ziq3LdUUO7F2Z95cvFFx16hU8jTeR1ASM=}
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY:-secret}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=True
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/config:/opt/airflow/config
+      - ./data:/opt/airflow/data
+      - airflow_logs:/opt/airflow/logs
+    ports:
+      - "8080:8080"
+    command: webserver
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - conformai-network
+
+  # Airflow Scheduler
+  airflow-scheduler:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
+    container_name: conformai-airflow-scheduler
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER:-conformai}:${POSTGRES_PASSWORD:-conformai_password}@postgres:5432/${POSTGRES_DB:-conformai}
+      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://${POSTGRES_USER:-conformai}:${POSTGRES_PASSWORD:-conformai_password}@postgres:5432/${POSTGRES_DB:-conformai}
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY:-FB0o_zt4e3Ziq3LdUUO7F2Z95cvFFx16hU8jTeR1ASM=}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/config:/opt/airflow/config
+      - ./data:/opt/airflow/data
+      - airflow_logs:/opt/airflow/logs
+    command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - conformai-network
+
+  # Airflow Worker (Celery)
+  airflow-worker:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
+    container_name: conformai-airflow-worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER:-conformai}:${POSTGRES_PASSWORD:-conformai_password}@postgres:5432/${POSTGRES_DB:-conformai}
+      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://${POSTGRES_USER:-conformai}:${POSTGRES_PASSWORD:-conformai_password}@postgres:5432/${POSTGRES_DB:-conformai}
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY:-FB0o_zt4e3Ziq3LdUUO7F2Z95cvFFx16hU8jTeR1ASM=}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/config:/opt/airflow/config
+      - ./data:/opt/airflow/data
+      - airflow_logs:/opt/airflow/logs
+    command: celery worker
+    healthcheck:
+      test: ["CMD-SHELL", 'celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - conformai-network
+
+  # RAG Service (LangGraph Orchestrator)
+  rag-service:
+    build:
+      context: .
+      dockerfile: services/rag-service/Dockerfile
+    container_name: conformai-rag-service
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-conformai}:${POSTGRES_PASSWORD:-conformai_password}@postgres:5432/${POSTGRES_DB:-conformai}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-false}
+    ports:
+      - "${RAG_SERVICE_PORT:-8001}:8000"
+    volumes:
+      - ./services/rag-service:/app
+      - ./shared:/app/shared
+    networks:
+      - conformai-network
+
+  # Retrieval Service (LangChain Retrieval)
+  retrieval-service:
+    build:
+      context: .
+      dockerfile: services/retrieval-service/Dockerfile
+    container_name: conformai-retrieval-service
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-conformai}:${POSTGRES_PASSWORD:-conformai_password}@postgres:5432/${POSTGRES_DB:-conformai}
+    ports:
+      - "${RETRIEVAL_SERVICE_PORT:-8002}:8000"
+    volumes:
+      - ./services/retrieval-service:/app
+      - ./shared:/app/shared
+    networks:
+      - conformai-network
+
+  # API Gateway (FastAPI)
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: conformai-api-gateway
+    depends_on:
+      - rag-service
+      - retrieval-service
+    environment:
+      - RAG_SERVICE_URL=http://rag-service:8000
+      - RETRIEVAL_SERVICE_URL=http://retrieval-service:8000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-conformai}:${POSTGRES_PASSWORD:-conformai_password}@postgres:5432/${POSTGRES_DB:-conformai}
+      - REDIS_URL=redis://redis:6379/0
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./services/api-gateway:/app
+      - ./shared:/app/shared
+    networks:
+      - conformai-network
+
+volumes:
+  postgres_data:
+    driver: local
+  qdrant_storage:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+  airflow_logs:
+    driver: local
+
+networks:
+  conformai-network:
+    driver: bridge
