@@ -139,10 +139,12 @@ def chunk_documents(**context):
         logger.warning("No parsed documents to chunk")
         return 0
 
-    # Initialize chunker
+    # Initialize chunker with tiktoken for OpenAI compatibility
     chunker = LegalChunker(
         max_chunk_tokens=512,
         overlap_sentences=2,
+        tokenizer_type="tiktoken",
+        encoding_name="cl100k_base",
     )
 
     all_chunks = []
@@ -195,15 +197,18 @@ def generate_embeddings(**context):
     """
     Generate embeddings for all chunks.
 
-    Uses Sentence Transformers with BGE model.
+    Uses OpenAI text-embedding-3-large model via API.
     """
     import pickle
 
     from services.data_pipeline.src.embeddings import EmbeddingGenerator
+    from shared.config import get_settings
     from shared.utils import get_logger
 
     logger = get_logger(__name__)
     logger.info("Starting embedding generation...")
+
+    settings = get_settings()
 
     # Get chunked documents from previous task
     ti = context["ti"]
@@ -213,12 +218,12 @@ def generate_embeddings(**context):
         logger.warning("No chunked documents to embed")
         return 0
 
-    # Initialize embedding generator
+    # Initialize embedding generator with OpenAI
     generator = EmbeddingGenerator(
-        model_name="BAAI/bge-large-en-v1.5",
-        device="cpu",  # Use 'cuda' if GPU available
-        batch_size=32,
+        model_name=settings.embedding_model,
+        batch_size=100,  # OpenAI supports larger batches
         show_progress=True,
+        dimensions=settings.embedding_dimension,
     )
 
     logger.info(f"Using embedding model: {generator.model_name}")

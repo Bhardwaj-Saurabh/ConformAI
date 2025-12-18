@@ -104,7 +104,12 @@ def detect_changes(**context):
 
     Compares fetched documents against database to identify changes.
     """
+    from datetime import date, datetime
+
     from shared.utils import get_logger
+    from sqlalchemy import create_engine, text
+
+    from shared.config.settings import get_settings
 
     logger = get_logger(__name__)
 
@@ -114,9 +119,60 @@ def detect_changes(**context):
 
     logger.info(f"Checking {len(document_list)} documents for changes...")
 
-    # TODO: Query database to check which documents are new/updated
-    # For now, treat all as new
-    new_documents = document_list
+    if not document_list:
+        logger.info("No documents to check")
+        ti.xcom_push(key="new_documents", value=[])
+        return 0
+
+    def _normalize_date(value):
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        try:
+            return datetime.fromisoformat(str(value)).date()
+        except ValueError:
+            return None
+
+    celex_ids = [doc.get("celex") for doc in document_list if doc.get("celex")]
+    if not celex_ids:
+        logger.info("No CELEX identifiers found in document list")
+        ti.xcom_push(key="new_documents", value=[])
+        return 0
+
+    settings = get_settings()
+    engine = create_engine(settings.database_url)
+
+    query = text(
+        """
+        SELECT celex, document_date
+        FROM eurlex_documents
+        WHERE celex = ANY(:celex_ids)
+        """
+    )
+
+    with engine.connect() as conn:
+        rows = conn.execute(query, {"celex_ids": celex_ids}).fetchall()
+
+    existing_by_celex = {row[0]: row[1] for row in rows}
+
+    new_documents = []
+    for doc in document_list:
+        celex = doc.get("celex")
+        if not celex:
+            continue
+        existing_date = _normalize_date(existing_by_celex.get(celex))
+        fetched_date = _normalize_date(doc.get("date"))
+
+        if existing_date is None:
+            new_documents.append(doc)
+            continue
+        if fetched_date is None:
+            continue
+        if fetched_date > existing_date:
+            new_documents.append(doc)
 
     logger.info(f"Found {len(new_documents)} new/updated documents")
 

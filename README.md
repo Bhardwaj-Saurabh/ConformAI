@@ -197,12 +197,17 @@ Key environment variables in `.env`:
 ```bash
 # LLM Provider
 ANTHROPIC_API_KEY=your_key_here
+OPENAI_API_KEY=your_openai_key_here
 LLM_PROVIDER=anthropic
 LLM_MODEL=claude-3-5-sonnet-20241022
 
+# Embeddings (OpenAI)
+EMBEDDING_MODEL=text-embedding-3-large
+EMBEDDING_DIMENSION=1024
+EMBEDDING_PROVIDER=openai
+
 # Vector Database
 QDRANT_URL=http://localhost:6333
-EMBEDDING_MODEL=BAAI/bge-large-en-v1.5
 
 # Retrieval Settings
 RETRIEVAL_TOP_K=10
@@ -235,7 +240,7 @@ kubectl scale deployment rag-service --replicas=3 -n conformai
 
 - **Prometheus**: Metrics on `/metrics` endpoint
 - **Grafana**: Dashboards for RAG performance, retrieval quality, data freshness
-- **LangSmith**: LLM tracing (set `LANGCHAIN_TRACING_V2=true`)
+- **Opik**: LLM and embedding tracing (set `OPIK_ENABLED=true`)
 
 ## Contributing
 

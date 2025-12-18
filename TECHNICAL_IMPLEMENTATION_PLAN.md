@@ -379,24 +379,23 @@ class LegalArticleChunker(TextSplitter):
 ```python
 # services/data-pipeline/embeddings/legal_embeddings.py
 
-from langchain.embeddings import HuggingFaceEmbeddings
-from sentence_transformers import SentenceTransformer
+from langchain_openai import OpenAIEmbeddings
 
 class LegalEmbeddingGenerator:
     """
     Generate embeddings optimized for legal text
 
-    Models to consider:
-    - nlpaueb/legal-bert-base-uncased
-    - sentence-transformers/all-MiniLM-L12-v2
-    - BAAI/bge-large-en-v1.5
+    Using OpenAI embeddings via API:
+    - text-embedding-3-large (1024-3072 dimensions)
+    - text-embedding-3-small (1536 dimensions)
     """
 
-    def __init__(self, model_name: str = "BAAI/bge-large-en-v1.5"):
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name=model_name,
-            model_kwargs={'device': 'cuda'},
-            encode_kwargs={'normalize_embeddings': True}
+    def __init__(self, model_name: str = "text-embedding-3-large", dimensions: int = 1024):
+        from langchain_openai import OpenAIEmbeddings
+
+        self.embeddings = OpenAIEmbeddings(
+            model=model_name,
+            dimensions=dimensions  # Adjustable from 256-3072
         )
 
     def embed_chunks(self, chunks: list[Chunk]) -> list[ChunkEmbedding]:
@@ -455,12 +454,13 @@ def create_legal_collection():
 # services/data-pipeline/indexing/vectordb_indexer.py
 
 from langchain_qdrant import Qdrant
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_openai import OpenAIEmbeddings
 
 class VectorDBIndexer:
     def __init__(self):
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name="BAAI/bge-large-en-v1.5"
+        self.embeddings = OpenAIEmbeddings(
+            model="text-embedding-3-large",
+            dimensions=1024
         )
         self.vectorstore = Qdrant(
             client=QdrantClient(url="http://qdrant:6333"),
@@ -514,12 +514,15 @@ class LegalHybridRetriever:
     """
 
     def __init__(self):
+        from langchain_openai import OpenAIEmbeddings
+
         # Dense retriever (vector similarity)
         self.dense_retriever = Qdrant(
             client=QdrantClient(url="http://qdrant:6333"),
             collection_name="eu_legal_documents",
-            embeddings=HuggingFaceEmbeddings(
-                model_name="BAAI/bge-large-en-v1.5"
+            embeddings=OpenAIEmbeddings(
+                model="text-embedding-3-large",
+                dimensions=1024
             )
         ).as_retriever(
             search_type="mmr",  # Maximum Marginal Relevance
