@@ -19,6 +19,14 @@ from graph.graph import run_rag_pipeline
 from shared.config.settings import get_settings
 from shared.utils.logger import get_logger
 
+# Import health check router
+try:
+    from api.health import router as health_router
+    HEALTH_ROUTER_AVAILABLE = True
+except ImportError:
+    HEALTH_ROUTER_AVAILABLE = False
+    logger.warning("Health router not available, using basic health check")
+
 settings = get_settings()
 logger = get_logger(__name__)
 
@@ -45,6 +53,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Add request ID middleware for tracking
+@app.middleware("http")
+async def add_request_id(request, call_next):
+    """Add request ID to all requests for tracking."""
+    import uuid
+    request_id = str(uuid.uuid4())
+    request.state.request_id = request_id
+
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -53,6 +73,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include health check router if available
+if HEALTH_ROUTER_AVAILABLE:
+    app.include_router(health_router)
+    logger.info("Comprehensive health check endpoints enabled")
 
 
 # ===== Routes =====
@@ -204,7 +229,8 @@ async def http_exception_handler(request, exc):
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc):
     """Handle general exceptions."""
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    request_id = getattr(request.state, "request_id", "unknown")
+    logger.error(f"[{request_id}] Unhandled exception: {exc}", exc_info=True)
 
     return JSONResponse(
         status_code=500,
@@ -212,6 +238,8 @@ async def general_exception_handler(request, exc):
             "success": False,
             "error": "Internal server error",
             "error_code": "INTERNAL_ERROR",
+            "request_id": request_id,
+            "timestamp": time.time(),
         },
     )
 
