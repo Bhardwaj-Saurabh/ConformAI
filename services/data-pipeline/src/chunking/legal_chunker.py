@@ -116,7 +116,15 @@ class LegalChunker:
             )
             all_chunks.extend(chapter_chunks)
 
-        logger.info(f"Created {len(all_chunks)} chunks from document")
+        # Filter out None chunks (invalid/too short chunks filtered during creation)
+        original_count = len(all_chunks)
+        all_chunks = [chunk for chunk in all_chunks if chunk is not None]
+
+        filtered_count = original_count - len(all_chunks)
+        if filtered_count > 0:
+            logger.info(f"Filtered out {filtered_count} invalid/too-short chunks")
+
+        logger.info(f"Created {len(all_chunks)} valid chunks from document")
         return all_chunks
 
     def chunk_chapter(
@@ -376,7 +384,7 @@ class LegalChunker:
         chunk_index: int,
         total_chunks: int | None = None,
         paragraph_index: int | None = None,
-    ) -> Chunk:
+    ) -> Chunk | None:
         """
         Create chunk with metadata.
 
@@ -390,8 +398,17 @@ class LegalChunker:
             paragraph_index: Index of paragraph within article
 
         Returns:
-            Chunk with full metadata
+            Chunk with full metadata, or None if text is invalid
         """
+        # Validate chunk text
+        if not text or not isinstance(text, str):
+            logger.warning(f"Invalid chunk text (empty or not string) in {article.number}")
+            return None
+
+        # Filter out chunks that are too short (likely formatting artifacts)
+        if len(text.strip()) < 10:
+            logger.debug(f"Skipping very short chunk ({len(text)} chars): '{text}'")
+            return None
         # Parse effective date
         effective_date = None
         if hasattr(regulation, "effective_date") and regulation.effective_date:

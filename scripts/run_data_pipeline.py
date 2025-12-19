@@ -201,6 +201,22 @@ def main() -> int:
                 document = pickle.load(handle)
 
             chunks = chunker.chunk_document(document)
+
+            # Filter out problematic chunks (empty or too short)
+            original_count = len(chunks)
+            chunks = [
+                chunk for chunk in chunks
+                if hasattr(chunk, 'text') and chunk.text and len(chunk.text.strip()) >= 10
+            ]
+
+            filtered_count = original_count - len(chunks)
+            if filtered_count > 0:
+                logger.info(f"Filtered out {filtered_count} problematic chunks from {celex}")
+
+            if not chunks:
+                logger.warning(f"No valid chunks for {celex} after filtering")
+                continue
+
             chunks_path = chunks_dir / f"{celex}_chunks.pkl"
             with chunks_path.open("wb") as handle:
                 pickle.dump(chunks, handle)
@@ -216,7 +232,7 @@ def main() -> int:
     logger.info("Generating embeddings...")
     generator = EmbeddingGenerator(
         model_name=settings.embedding_model,
-        batch_size=100,
+        batch_size=50,  # Reduced from 100 to prevent API errors
         show_progress=True,
         dimensions=settings.embedding_dimension,
     )
@@ -224,18 +240,43 @@ def main() -> int:
     embedded_docs: list[Path] = []
     for doc_info in chunked_docs:
         celex = doc_info["celex"]
+        embedded_path = embeddings_dir / f"{celex}_embedded.pkl"
+
+        # Skip if embeddings already exist and are valid
+        if embedded_path.exists():
+            try:
+                with embedded_path.open("rb") as handle:
+                    existing_chunks = pickle.load(handle)
+                if existing_chunks and len(existing_chunks) > 0:
+                    logger.info(f"Using existing embeddings for {celex} ({len(existing_chunks)} chunks)")
+                    embedded_docs.append(embedded_path)
+                    continue
+            except Exception:
+                logger.warning(f"Existing embeddings for {celex} are invalid, regenerating...")
+
         try:
             with Path(doc_info["path"]).open("rb") as handle:
                 chunks = pickle.load(handle)
 
+            if not chunks:
+                logger.warning(f"No chunks to embed for {celex}")
+                continue
+
+            logger.info(f"Embedding {len(chunks)} chunks for {celex}...")
             embedded_chunks = generator.generate_embeddings(chunks, normalize=True)
-            embedded_path = embeddings_dir / f"{celex}_embedded.pkl"
+
+            if not embedded_chunks or len(embedded_chunks) == 0:
+                logger.error(f"Embedding generation returned empty list for {celex}")
+                continue
+
             with embedded_path.open("wb") as handle:
                 pickle.dump(embedded_chunks, handle)
 
+            logger.info(f"✓ Saved {len(embedded_chunks)} embeddings for {celex}")
             embedded_docs.append(embedded_path)
         except Exception as exc:
             logger.error(f"Failed to embed {celex}: {exc}")
+            logger.error("You can re-run the pipeline to retry this document")
 
     if not embedded_docs:
         logger.warning("No embeddings generated.")
