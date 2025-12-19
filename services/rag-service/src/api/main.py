@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from services.rag_service.src.api.schemas import (
+from api.schemas import (
     ErrorResponse,
     HealthResponse,
     QueryMetadata,
@@ -15,7 +15,7 @@ from services.rag_service.src.api.schemas import (
     QueryResponse,
     ReasoningStep,
 )
-from services.rag_service.src.graph.graph import run_rag_pipeline
+from graph.graph import run_rag_pipeline
 from shared.config.settings import get_settings
 from shared.utils.logger import get_logger
 
@@ -114,7 +114,7 @@ async def query_compliance(request: QueryRequest):
 
     try:
         # Update max iterations if provided
-        from services.rag_service.src.graph.state import create_initial_state
+        from graph.state import create_initial_state
 
         initial_state = create_initial_state(request.query, request.conversation_id)
         initial_state["max_iterations"] = request.max_iterations

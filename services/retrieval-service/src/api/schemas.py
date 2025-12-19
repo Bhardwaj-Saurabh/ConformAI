@@ -8,7 +8,7 @@ class RetrievalRequest(BaseModel):
 
     query: str = Field(..., description="Search query", min_length=1)
     top_k: int = Field(default=10, description="Number of results to return", ge=1, le=100)
-    filters: dict[str, str] | None = Field(
+    filters: dict[str, str | list[str]] | None = Field(
         default=None,
         description="Metadata filters (regulation, domain, risk_category, etc.)",
     )
@@ -36,7 +36,7 @@ class BatchRetrievalRequest(BaseModel):
 
     queries: list[str] = Field(..., description="List of search queries", min_length=1, max_length=50)
     top_k: int = Field(default=10, description="Number of results per query", ge=1, le=100)
-    filters: dict[str, str] | None = Field(
+    filters: dict[str, str | list[str]] | None = Field(
         default=None,
         description="Metadata filters applied to all queries",
     )
@@ -49,7 +49,7 @@ class ChunkMetadata(BaseModel):
     article: str | None
     paragraph: str | None
     celex: str | None
-    domain: str | None
+    domain: str | list[str] | None
     risk_category: str | None
     effective_date: str | None
     chunk_index: int | None
@@ -66,7 +66,7 @@ class Chunk(BaseModel):
     article: str | None = None
     paragraph: str | None = None
     celex: str | None = None
-    domain: str | None = None
+    domain: str | list[str] | None = None
     risk_category: str | None = None
 
 
@@ -80,7 +80,7 @@ class RetrievalResponse(BaseModel):
     min_score: float
     max_score: float
     avg_score: float
-    filters_applied: dict[str, str]
+    filters_applied: dict[str, str | list[str]]
 
 
 class BatchRetrievalResponse(BaseModel):

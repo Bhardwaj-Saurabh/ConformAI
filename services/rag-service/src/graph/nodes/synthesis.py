@@ -5,8 +5,8 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from services.rag_service.src.graph.state import Citation, RAGState
-from services.rag_service.src.llm.client import get_generation_llm
+from graph.state import Citation, RAGState
+from llm.client import get_generation_llm, invoke_llm
 from shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -75,7 +75,7 @@ TASK:
 
 SYNTHESIZED ANSWER:"""
 
-        response = await llm.ainvoke([HumanMessage(content=synthesis_prompt)])
+        response = await invoke_llm(llm, [HumanMessage(content=synthesis_prompt)])
 
         state["final_answer"] = response.content
         state["reasoning_trace"].append("Synthesized final answer from sub-answers")
@@ -129,7 +129,7 @@ INSTRUCTIONS:
 
 ANSWER:"""
 
-        response = await llm.ainvoke([HumanMessage(content=generation_prompt)])
+        response = await invoke_llm(llm, [HumanMessage(content=generation_prompt)])
 
         state["final_answer"] = response.content
         state["reasoning_trace"].append("Generated answer directly from retrieved sources")

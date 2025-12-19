@@ -1,8 +1,9 @@
 """Query embedding generation."""
 
+import asyncio
 from functools import lru_cache
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAI
 
 from shared.config.settings import get_settings
 from shared.utils.logger import get_logger
@@ -20,6 +21,7 @@ class EmbeddingService:
             raise ValueError("OPENAI_API_KEY not set in environment")
 
         self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+        self.sync_client = OpenAI(api_key=settings.openai_api_key)
         self.model = settings.embedding_model
         self.dimensions = settings.embedding_dimension
 
@@ -55,8 +57,17 @@ class EmbeddingService:
             return embedding
 
         except Exception as e:
-            logger.error(f"Error generating embedding: {e}")
-            raise
+            logger.warning(f"Async embedding failed, falling back to sync: {e}")
+
+            def _sync_embed() -> list[float]:
+                response = self.sync_client.embeddings.create(
+                    model=self.model,
+                    input=query,
+                    dimensions=self.dimensions,
+                )
+                return response.data[0].embedding
+
+            return await asyncio.to_thread(_sync_embed)
 
     async def embed_batch(self, queries: list[str]) -> list[list[float]]:
         """
@@ -88,8 +99,17 @@ class EmbeddingService:
             return embeddings
 
         except Exception as e:
-            logger.error(f"Error generating batch embeddings: {e}")
-            raise
+            logger.warning(f"Async batch embedding failed, falling back to sync: {e}")
+
+            def _sync_embed_batch() -> list[list[float]]:
+                response = self.sync_client.embeddings.create(
+                    model=self.model,
+                    input=queries,
+                    dimensions=self.dimensions,
+                )
+                return [item.embedding for item in response.data]
+
+            return await asyncio.to_thread(_sync_embed_batch)
 
 
 # ===== Singleton instance =====

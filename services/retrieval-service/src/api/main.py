@@ -1,12 +1,21 @@
 """FastAPI application for retrieval service."""
 
+import sys
+from pathlib import Path
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from services.retrieval_service.src.api.schemas import (
+# Add project root and retrieval-service src to path
+project_root = Path(__file__).resolve().parents[3]
+retrieval_src = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(retrieval_src))
+
+from api.schemas import (
     ArticleRequest,
     BatchRetrievalRequest,
     BatchRetrievalResponse,
@@ -16,7 +25,7 @@ from services.retrieval_service.src.api.schemas import (
     RetrievalRequest,
     RetrievalResponse,
 )
-from services.retrieval_service.src.retrieval.retriever import get_retrieval_service
+from retrieval.retriever import get_retrieval_service
 from shared.config.settings import get_settings
 from shared.utils.logger import get_logger
 

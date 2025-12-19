@@ -7,9 +7,9 @@ from typing import Any
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
-from services.rag_service.src.agent.tools import AGENT_TOOLS
-from services.rag_service.src.graph.state import AgentAction, RAGState
-from services.rag_service.src.llm.client import get_planning_llm
+from agent.tools import AGENT_TOOLS
+from graph.state import AgentAction, RAGState
+from llm.client import get_planning_llm, invoke_llm
 from shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -93,7 +93,7 @@ Example:
     "is_final": false
 }}"""
 
-        response = await llm.ainvoke([HumanMessage(content=planning_prompt)])
+        response = await invoke_llm(llm, [HumanMessage(content=planning_prompt)])
 
         # Parse decision
         try:

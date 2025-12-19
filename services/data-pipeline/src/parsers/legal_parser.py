@@ -136,11 +136,13 @@ class LegalDocumentParser:
         if regulation is None:
             regulation = self._extract_metadata_from_html(soup)
 
-        # Extract chapters and articles
-        chapters = self._extract_chapters_from_html(soup)
-
         # Extract raw text
         raw_text = soup.get_text(separator="\n", strip=True)
+
+        # Extract chapters and articles
+        chapters = self._extract_chapters_from_html(soup)
+        if not chapters and raw_text:
+            chapters = self._extract_chapters_from_text(raw_text)
 
         return LegalDocument(
             regulation=regulation,
@@ -204,9 +206,12 @@ class LegalDocumentParser:
         title_elem = tree.find(".//TITLE")
         title = title_elem.text if title_elem is not None else "Unknown Title"
 
+        title_words = title.split() if title else []
+        short_name = " ".join(title_words[:3]) if title_words else "Unknown"
+
         return Regulation(
             celex_id=celex,
-            name=title.split()[0:3] if title else "Unknown",  # First few words
+            name=short_name,
             full_title=title,
         )
 
@@ -474,9 +479,12 @@ class LegalDocumentParser:
         title_elem = soup.find("title") or soup.find("h1")
         title = title_elem.get_text(strip=True) if title_elem else "Unknown Title"
 
+        title_words = title.split() if title else []
+        short_name = " ".join(title_words[:3]) if title_words else "Unknown"
+
         return Regulation(
             celex_id="unknown",
-            name=title.split()[0:3] if title else "Unknown",
+            name=short_name,
             full_title=title,
         )
 

@@ -6,8 +6,8 @@ from typing import Any
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
-from services.rag_service.src.graph.state import RAGState
-from services.rag_service.src.llm.client import get_planning_llm
+from graph.state import RAGState
+from llm.client import get_planning_llm, invoke_llm
 from shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -226,7 +226,7 @@ Return JSON format:
 
 Be strict: if a claim is not explicitly or clearly implied by the sources, mark it as unsupported."""
 
-        response = await llm.ainvoke([HumanMessage(content=hallucination_prompt)])
+        response = await invoke_llm(llm, [HumanMessage(content=hallucination_prompt)])
 
         # Parse JSON response (simplified)
         import json
@@ -271,7 +271,7 @@ async def regenerate_with_citations(state: RAGState) -> dict[str, Any]:
     """
     logger.info("Regenerating answer with stricter grounding requirements")
 
-    from services.rag_service.src.llm.client import get_generation_llm
+    from llm.client import get_generation_llm
     from langchain_core.messages import HumanMessage
 
     try:
@@ -308,7 +308,7 @@ EXAMPLE OF PROPER CITATION:
 
 ANSWER (with citations for EVERY claim):"""
 
-        response = await llm.ainvoke([HumanMessage(content=strict_prompt)])
+        response = await invoke_llm(llm, [HumanMessage(content=strict_prompt)])
 
         state["final_answer"] = response.content
 

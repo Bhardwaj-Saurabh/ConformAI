@@ -4,22 +4,22 @@ from typing import Literal
 
 from langgraph.graph import END, StateGraph
 
-from services.rag_service.src.graph.nodes.analysis import (
+from graph.nodes.analysis import (
     analyze_query,
     decompose_query,
     safety_check,
 )
-from services.rag_service.src.graph.nodes.react_agent import (
+from graph.nodes.react_agent import (
     react_act,
     react_observe,
     react_plan,
 )
-from services.rag_service.src.graph.nodes.synthesis import (
+from graph.nodes.synthesis import (
     format_response,
     synthesize_answer,
 )
-from services.rag_service.src.graph.nodes.validation import validate_grounding
-from services.rag_service.src.graph.state import RAGState
+from graph.nodes.validation import validate_grounding
+from graph.state import RAGState
 from shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -221,7 +221,7 @@ async def run_rag_pipeline(query: str, conversation_id: str | None = None) -> RA
         )
         print(result["final_answer"])
     """
-    from services.rag_service.src.graph.state import create_initial_state
+    from graph.state import create_initial_state
     import time
 
     start_time = time.time()

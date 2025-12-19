@@ -150,7 +150,7 @@ async def answer_sub_question(
             legal_sources=[{chunk1}, {chunk2}, ...]
         )
     """
-    from services.rag_service.src.llm.client import get_llm_client
+    from llm.client import get_llm_client, invoke_llm
 
     try:
         # Format sources for prompt
@@ -181,7 +181,7 @@ INSTRUCTIONS:
 ANSWER:"""
 
         llm = get_llm_client()
-        response = await llm.ainvoke(prompt)
+        response = await invoke_llm(llm, prompt)
 
         answer = response.content if hasattr(response, "content") else str(response)
 
@@ -217,7 +217,7 @@ async def synthesize_information(answers: dict[str, str], original_query: str) -
             original_query="What are the obligations and prohibitions for recruitment AI?"
         )
     """
-    from services.rag_service.src.llm.client import get_llm_client
+    from llm.client import get_llm_client, invoke_llm
 
     try:
         # Format sub-answers
@@ -244,7 +244,7 @@ TASK:
 SYNTHESIZED ANSWER:"""
 
         llm = get_llm_client()
-        response = await llm.ainvoke(synthesis_prompt)
+        response = await invoke_llm(llm, synthesis_prompt)
 
         synthesized = response.content if hasattr(response, "content") else str(response)
 
@@ -280,7 +280,7 @@ async def validate_claim(claim: str, legal_sources: list[dict[str, Any]]) -> dic
             legal_sources=[{chunk1}, {chunk2}, ...]
         )
     """
-    from services.rag_service.src.llm.client import get_llm_client
+    from llm.client import get_llm_client, invoke_llm
 
     try:
         # Format sources
@@ -308,7 +308,7 @@ Is the claim supported by the sources? Answer in JSON format:
 }}"""
 
         llm = get_llm_client()
-        response = await llm.ainvoke(validation_prompt)
+        response = await invoke_llm(llm, validation_prompt)
 
         # Parse JSON response (simplified - would need proper parsing)
         result = {

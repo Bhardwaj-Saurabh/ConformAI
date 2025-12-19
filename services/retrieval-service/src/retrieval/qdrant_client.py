@@ -3,6 +3,7 @@
 from typing import Any
 
 from qdrant_client import QdrantClient
+from qdrant_client.http import models as qmodels
 from qdrant_client.models import (
     Distance,
     FieldCondition,
@@ -68,15 +69,27 @@ class QdrantVectorStore:
             qdrant_filter = self._build_filter(filters) if filters else None
 
             # Perform search
-            search_result = self.client.search(
-                collection_name=self.collection_name,
-                query_vector=query_vector,
-                limit=top_k,
-                query_filter=qdrant_filter,
-                score_threshold=score_threshold,
-                with_payload=True,
-                with_vectors=False,  # Don't return vectors to save bandwidth
-            )
+            if hasattr(self.client, "search"):
+                search_result = self.client.search(
+                    collection_name=self.collection_name,
+                    query_vector=query_vector,
+                    limit=top_k,
+                    query_filter=qdrant_filter,
+                    score_threshold=score_threshold,
+                    with_payload=True,
+                    with_vectors=False,  # Don't return vectors to save bandwidth
+                )
+            else:
+                response = self.client.query_points(
+                    collection_name=self.collection_name,
+                    query=query_vector,
+                    limit=top_k,
+                    query_filter=qdrant_filter,
+                    score_threshold=score_threshold,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+                search_result = response.points
 
             # Convert to dict format
             results = [self._point_to_dict(point) for point in search_result]
@@ -140,23 +153,39 @@ class QdrantVectorStore:
             qdrant_filter = self._build_filter(filters) if filters else None
 
             # Batch search
-            batch_results = self.client.search_batch(
-                collection_name=self.collection_name,
-                requests=[
-                    {
-                        "vector": vec,
-                        "limit": top_k,
-                        "filter": qdrant_filter,
-                        "with_payload": True,
-                        "with_vectors": False,
-                    }
+            if hasattr(self.client, "search_batch"):
+                batch_results = self.client.search_batch(
+                    collection_name=self.collection_name,
+                    requests=[
+                        {
+                            "vector": vec,
+                            "limit": top_k,
+                            "filter": qdrant_filter,
+                            "with_payload": True,
+                            "with_vectors": False,
+                        }
+                        for vec in query_vectors
+                    ],
+                )
+            else:
+                requests = [
+                    qmodels.QueryRequest(
+                        query=vec,
+                        limit=top_k,
+                        filter=qdrant_filter,
+                        with_payload=True,
+                        with_vector=False,
+                    )
                     for vec in query_vectors
-                ],
-            )
+                ]
+                batch_results = self.client.query_batch_points(
+                    collection_name=self.collection_name,
+                    requests=requests,
+                )
 
             # Convert results
             results = [
-                [self._point_to_dict(point) for point in batch]
+                [self._point_to_dict(point) for point in batch.points]
                 for batch in batch_results
             ]
 
@@ -220,15 +249,23 @@ class QdrantVectorStore:
         """
         conditions = []
 
+        field_map = {
+            "regulation": "regulation_name",
+            "celex": "celex_id",
+            "article": "article_number",
+            "domain": "domains",
+        }
+
         for key, value in filters.items():
             if value is not None:
+                mapped_key = field_map.get(key, key)
                 # Handle different value types
                 if isinstance(value, list):
                     # Match any value in list
                     for v in value:
                         conditions.append(
                             FieldCondition(
-                                key=f"metadata.{key}",
+                                key=mapped_key,
                                 match=MatchValue(value=v),
                             )
                         )
@@ -236,7 +273,7 @@ class QdrantVectorStore:
                     # Exact match
                     conditions.append(
                         FieldCondition(
-                            key=f"metadata.{key}",
+                            key=mapped_key,
                             match=MatchValue(value=value),
                         )
                     )
@@ -258,21 +295,24 @@ class QdrantVectorStore:
         """
         payload = point.payload or {}
 
+        content = payload.get("content") or payload.get("text") or ""
+        metadata = payload.get("metadata") or payload
+
         result = {
             "id": str(point.id),
             "score": getattr(point, "score", None),
-            "content": payload.get("content", ""),
-            "metadata": payload.get("metadata", {}),
+            "content": content,
+            "metadata": metadata,
         }
 
         # Flatten metadata for easier access
         metadata = result["metadata"]
         result.update({
-            "regulation": metadata.get("regulation"),
-            "article": metadata.get("article"),
-            "paragraph": metadata.get("paragraph"),
-            "celex": metadata.get("celex"),
-            "domain": metadata.get("domain"),
+            "regulation": metadata.get("regulation") or metadata.get("regulation_name"),
+            "article": metadata.get("article") or metadata.get("article_number"),
+            "paragraph": metadata.get("paragraph") or metadata.get("paragraph_index"),
+            "celex": metadata.get("celex") or metadata.get("celex_id"),
+            "domain": metadata.get("domain") or metadata.get("domains"),
             "risk_category": metadata.get("risk_category"),
             "effective_date": metadata.get("effective_date"),
             "chunk_index": metadata.get("chunk_index"),

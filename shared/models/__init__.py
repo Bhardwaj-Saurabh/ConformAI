@@ -9,12 +9,14 @@ from .legal_document import (
     LegalDocument,
     QueryClassification,
     Regulation,
+    RegulationType,
     RiskCategory,
 )
 
 __all__ = [
     "LegalDocument",
     "Regulation",
+    "RegulationType",
     "Chapter",
     "Article",
     "Chunk",

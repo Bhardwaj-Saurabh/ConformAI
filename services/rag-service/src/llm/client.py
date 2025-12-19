@@ -1,10 +1,8 @@
 """LLM client factory for Anthropic and OpenAI models."""
 
 from functools import lru_cache
+import asyncio
 from typing import Literal
-
-from langchain_anthropic import ChatAnthropic
-from langchain_openai import ChatOpenAI
 
 from shared.config.settings import get_settings
 from shared.utils.logger import get_logger
@@ -48,6 +46,14 @@ def get_llm_client(
         if not settings.anthropic_api_key:
             raise ValueError("ANTHROPIC_API_KEY not set in environment")
 
+        try:
+            from langchain_anthropic import ChatAnthropic
+        except ImportError as exc:
+            raise ImportError(
+                "langchain-anthropic is required for Anthropic models. "
+                "Install with: pip install langchain-anthropic"
+            ) from exc
+
         return ChatAnthropic(
             api_key=settings.anthropic_api_key,
             model=model,
@@ -58,6 +64,14 @@ def get_llm_client(
     elif provider == "openai":
         if not settings.openai_api_key:
             raise ValueError("OPENAI_API_KEY not set in environment")
+
+        try:
+            from langchain_openai import ChatOpenAI
+        except ImportError as exc:
+            raise ImportError(
+                "langchain-openai is required for OpenAI models. "
+                "Install with: pip install langchain-openai"
+            ) from exc
 
         return ChatOpenAI(
             api_key=settings.openai_api_key,
@@ -81,19 +95,17 @@ def get_planning_llm():
         LangChain ChatModel for planning tasks
     """
     if settings.llm_provider == "anthropic":
-        # Use Sonnet for planning
         return get_llm_client(
             provider="anthropic",
-            model="claude-3-5-sonnet-20241022",
+            model=settings.llm_model,
             temperature=0.0,
         )
-    else:
-        # Use GPT-4o for planning
-        return get_llm_client(
-            provider="openai",
-            model="gpt-4o",
-            temperature=0.0,
-        )
+
+    return get_llm_client(
+        provider="openai",
+        model=settings.llm_model,
+        temperature=0.0,
+    )
 
 
 def get_generation_llm():
@@ -107,3 +119,16 @@ def get_generation_llm():
     """
     # Use configured default model
     return get_llm_client()
+
+
+async def invoke_llm(llm, input_data):
+    """
+    Invoke LLM with async-first strategy and sync fallback.
+
+    Some environments have broken async DNS; fallback uses sync invoke in a thread.
+    """
+    try:
+        return await llm.ainvoke(input_data)
+    except Exception as exc:
+        logger.warning(f"Async LLM call failed, falling back to sync invoke: {exc}")
+        return await asyncio.to_thread(llm.invoke, input_data)

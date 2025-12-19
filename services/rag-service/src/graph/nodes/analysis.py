@@ -6,8 +6,8 @@ from typing import Any
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
-from services.rag_service.src.graph.state import RAGState, SubQuery
-from services.rag_service.src.llm.client import get_planning_llm
+from graph.state import RAGState, SubQuery
+from llm.client import get_planning_llm, invoke_llm
 from shared.models.legal_document import AIDomain, RiskCategory
 from shared.utils.logger import get_logger
 
@@ -72,7 +72,7 @@ Examples:
 
 Return ONLY the JSON, no additional text."""
 
-        response = await llm.ainvoke([HumanMessage(content=analysis_prompt)])
+        response = await invoke_llm(llm, [HumanMessage(content=analysis_prompt)])
 
         # Parse JSON response
         try:
@@ -191,7 +191,7 @@ Return JSON format:
 
 IMPORTANT: Each sub-question should be answerable independently using legal document retrieval."""
 
-        response = await llm.ainvoke([HumanMessage(content=decomposition_prompt)])
+        response = await invoke_llm(llm, [HumanMessage(content=decomposition_prompt)])
 
         # Parse JSON
         try:
@@ -295,7 +295,7 @@ QUERY: {state["query"]}
 Answer YES or NO, and provide brief explanation.
 If asking for personal legal advice (not informational), answer NO."""
 
-            response = await llm.ainvoke([HumanMessage(content=scope_prompt)])
+            response = await invoke_llm(llm, [HumanMessage(content=scope_prompt)])
 
             if "no" in response.content.lower()[:50]:  # Check first part of response
                 state["is_safe"] = False

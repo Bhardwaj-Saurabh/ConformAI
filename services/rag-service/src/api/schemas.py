@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from services.rag_service.src.graph.state import Citation
+from graph.state import Citation
 
 
 class QueryRequest(BaseModel):

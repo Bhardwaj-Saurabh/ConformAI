@@ -2,8 +2,8 @@
 
 from typing import Any
 
-from services.retrieval_service.src.retrieval.embedder import get_embedding_service
-from services.retrieval_service.src.retrieval.qdrant_client import get_qdrant_store
+from retrieval.embedder import get_embedding_service
+from retrieval.qdrant_client import get_qdrant_store
 from shared.config.settings import get_settings
 from shared.utils.logger import get_logger
 
@@ -74,6 +74,25 @@ class RetrievalService:
                 score_threshold=score_threshold,
             )
 
+            filters_applied = filters or {}
+            if not results and filters:
+                relaxed_filters = dict(filters)
+                for key in ["risk_category", "domain", "regulation"]:
+                    if key in relaxed_filters:
+                        relaxed_filters.pop(key)
+                        logger.info(
+                            f"No results with filters; retrying without {key} filter"
+                        )
+                        results = await self.vector_store.search(
+                            query_vector=query_vector,
+                            top_k=fetch_k,
+                            filters=relaxed_filters or None,
+                            score_threshold=score_threshold,
+                        )
+                        if results:
+                            filters_applied = relaxed_filters
+                            break
+
             # 3. Apply reranking if requested
             if rerank and len(results) > top_k:
                 # TODO: Implement cross-encoder reranking
@@ -91,7 +110,7 @@ class RetrievalService:
                 "min_score": min(scores) if scores else 0.0,
                 "max_score": max(scores) if scores else 0.0,
                 "avg_score": sum(scores) / len(scores) if scores else 0.0,
-                "filters_applied": filters or {},
+                "filters_applied": filters_applied,
             }
 
         except Exception as e:

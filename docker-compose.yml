@@ -81,8 +81,8 @@ services:
   # Airflow Webserver
   airflow-webserver:
     build:
-      context: ./airflow
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: airflow/Dockerfile
     container_name: conformai-airflow-webserver
     depends_on:
       postgres:
@@ -118,8 +118,8 @@ services:
   # Airflow Scheduler
   airflow-scheduler:
     build:
-      context: ./airflow
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: airflow/Dockerfile
     container_name: conformai-airflow-scheduler
     depends_on:
       postgres:
@@ -151,8 +151,8 @@ services:
   # Airflow Worker (Celery)
   airflow-worker:
     build:
-      context: ./airflow
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: airflow/Dockerfile
     container_name: conformai-airflow-worker
     depends_on:
       postgres:
@@ -196,8 +196,8 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-conformai}:${POSTGRES_PASSWORD:-conformai_password}@postgres:5432/${POSTGRES_DB:-conformai}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
-      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-false}
+      # - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
+      # - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-false}
     ports:
       - "${RAG_SERVICE_PORT:-8001}:8000"
     volumes:

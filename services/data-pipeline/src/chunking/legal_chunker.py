@@ -14,7 +14,10 @@ Strategy:
 from datetime import date
 from typing import Any, Literal
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+try:
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+except ImportError:  # pragma: no cover - fallback for older LangChain versions
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 from shared.models import (
     AIDomain,
