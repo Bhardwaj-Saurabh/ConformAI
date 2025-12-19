@@ -2,9 +2,12 @@
 Opik Observability Integration
 
 Provides tracing and monitoring for ConformAI using Opik.
+Includes LangGraph node tracing, LLM call tracking, and performance metrics.
 """
 
 import functools
+import time
+from contextlib import contextmanager
 from typing import Any, Callable, Optional
 
 from shared.config import get_settings
@@ -15,6 +18,7 @@ settings = get_settings()
 
 # Global Opik client (lazy loaded)
 _opik_client = None
+_current_trace = None
 
 
 def get_opik_client():
@@ -51,6 +55,40 @@ def get_opik_client():
             return None
 
     return _opik_client
+
+
+@contextmanager
+def trace_context(name: str, tags: Optional[list[str]] = None, metadata: Optional[dict] = None):
+    """
+    Context manager for creating a trace span.
+
+    Args:
+        name: Name of the trace span
+        tags: Optional list of tags
+        metadata: Optional metadata dict
+
+    Yields:
+        Trace span object
+    """
+    client = get_opik_client()
+
+    if client is None:
+        yield None
+        return
+
+    try:
+        import opik
+
+        with opik.track(
+            name=name,
+            tags=tags or ["conformai"],
+            metadata=metadata or {},
+        ) as trace:
+            yield trace
+
+    except Exception as e:
+        logger.warning(f"Opik trace failed: {e}")
+        yield None
 
 
 def track_operation(
@@ -289,6 +327,260 @@ def log_event(event_name: str, properties: Optional[dict[str, Any]] = None):
         )
     except Exception as e:
         logger.warning(f"Failed to log event to Opik: {str(e)}")
+
+
+def track_langgraph_node(node_name: str, node_type: str = "processing"):
+    """
+    Decorator to track LangGraph node execution with Opik.
+
+    Args:
+        node_name: Name of the LangGraph node
+        node_type: Type of node (analysis, retrieval, synthesis, validation, etc.)
+
+    Example:
+        @track_langgraph_node("analyze_query", "analysis")
+        async def analyze_query(state: RAGState):
+            ...
+    """
+
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            client = get_opik_client()
+
+            if client is None:
+                return await func(*args, **kwargs)
+
+            start_time = time.time()
+
+            try:
+                import opik
+
+                # Extract state from args
+                state = args[0] if args else kwargs.get("state", {})
+
+                # Prepare metadata
+                metadata = {
+                    "node_name": node_name,
+                    "node_type": node_type,
+                    "query": state.get("query", "")[:200] if isinstance(state, dict) else "",
+                    "iteration": state.get("iteration_count", 0) if isinstance(state, dict) else 0,
+                }
+
+                with opik.track(
+                    name=f"langgraph_node_{node_name}",
+                    tags=["langgraph", node_type, "conformai"],
+                    metadata=metadata,
+                ) as trace:
+                    # Execute node
+                    result = await func(*args, **kwargs)
+
+                    # Calculate duration
+                    duration_ms = (time.time() - start_time) * 1000
+
+                    # Log output
+                    output_data = {
+                        "status": "success",
+                        "duration_ms": duration_ms,
+                    }
+
+                    # Add specific output based on node type
+                    if node_type == "analysis" and isinstance(result, dict):
+                        output_data.update({
+                            "intent": result.get("intent"),
+                            "complexity": result.get("query_complexity"),
+                            "ai_domain": str(result.get("ai_domain")) if result.get("ai_domain") else None,
+                        })
+                    elif node_type == "retrieval" and isinstance(result, dict):
+                        output_data.update({
+                            "chunks_retrieved": len(result.get("all_retrieved_chunks", [])),
+                        })
+                    elif node_type == "synthesis" and isinstance(result, dict):
+                        output_data.update({
+                            "answer_length": len(result.get("final_answer", "")),
+                            "citation_count": len(result.get("citations", [])),
+                        })
+
+                    trace.update(output=output_data)
+
+                    return result
+
+            except Exception as e:
+                duration_ms = (time.time() - start_time) * 1000
+                if client:
+                    try:
+                        trace.update(
+                            output={
+                                "status": "error",
+                                "error": str(e),
+                                "duration_ms": duration_ms,
+                            },
+                            error=True,
+                        )
+                    except:
+                        pass
+                raise
+
+        @functools.wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            client = get_opik_client()
+
+            if client is None:
+                return func(*args, **kwargs)
+
+            start_time = time.time()
+
+            try:
+                import opik
+
+                state = args[0] if args else kwargs.get("state", {})
+
+                metadata = {
+                    "node_name": node_name,
+                    "node_type": node_type,
+                    "query": state.get("query", "")[:200] if isinstance(state, dict) else "",
+                    "iteration": state.get("iteration_count", 0) if isinstance(state, dict) else 0,
+                }
+
+                with opik.track(
+                    name=f"langgraph_node_{node_name}",
+                    tags=["langgraph", node_type, "conformai"],
+                    metadata=metadata,
+                ) as trace:
+                    result = func(*args, **kwargs)
+                    duration_ms = (time.time() - start_time) * 1000
+
+                    trace.update(output={
+                        "status": "success",
+                        "duration_ms": duration_ms,
+                    })
+
+                    return result
+
+            except Exception as e:
+                duration_ms = (time.time() - start_time) * 1000
+                if client:
+                    try:
+                        trace.update(
+                            output={
+                                "status": "error",
+                                "error": str(e),
+                                "duration_ms": duration_ms,
+                            },
+                            error=True,
+                        )
+                    except:
+                        pass
+                raise
+
+        # Return appropriate wrapper based on whether function is async
+        import inspect
+        if inspect.iscoroutinefunction(func):
+            return async_wrapper
+        else:
+            return sync_wrapper
+
+    return decorator
+
+
+def track_rag_pipeline(pipeline_name: str = "rag_pipeline"):
+    """
+    Decorator to track the entire RAG pipeline execution.
+
+    Args:
+        pipeline_name: Name of the pipeline
+
+    Example:
+        @track_rag_pipeline("eu_compliance_rag")
+        async def run_rag_pipeline(query: str):
+            ...
+    """
+
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            client = get_opik_client()
+
+            if client is None:
+                return await func(*args, **kwargs)
+
+            start_time = time.time()
+
+            try:
+                import opik
+
+                # Extract query from args
+                query = args[0] if args else kwargs.get("query", "")
+
+                with opik.track(
+                    name=pipeline_name,
+                    tags=["rag_pipeline", "end_to_end", "conformai"],
+                    metadata={
+                        "query": query[:200] if isinstance(query, str) else "",
+                        "pipeline": pipeline_name,
+                    },
+                ) as trace:
+                    # Log input
+                    trace.log_input({"query": query})
+
+                    # Execute pipeline
+                    result = await func(*args, **kwargs)
+
+                    # Calculate duration
+                    duration_ms = (time.time() - start_time) * 1000
+
+                    # Extract metrics from result
+                    output_data = {
+                        "status": "success",
+                        "duration_ms": duration_ms,
+                    }
+
+                    if isinstance(result, dict):
+                        output_data.update({
+                            "answer_length": len(result.get("final_answer", "")),
+                            "citation_count": len(result.get("citations", [])),
+                            "confidence_score": result.get("confidence_score", 0.0),
+                            "iterations": result.get("iteration_count", 0),
+                            "llm_calls": result.get("total_llm_calls", 0),
+                            "tokens_used": result.get("total_tokens_used", 0),
+                            "refused": bool(result.get("refusal_reason")),
+                        })
+
+                        # Log answer
+                        trace.log_output({
+                            "answer": result.get("final_answer", "")[:500],
+                            "metrics": output_data,
+                        })
+
+                    trace.update(output=output_data)
+
+                    # Log performance metrics
+                    log_metric("rag_pipeline_duration_ms", duration_ms, {"pipeline": pipeline_name})
+                    if isinstance(result, dict):
+                        log_metric("rag_confidence_score", result.get("confidence_score", 0.0))
+                        log_metric("rag_iterations", result.get("iteration_count", 0))
+
+                    return result
+
+            except Exception as e:
+                duration_ms = (time.time() - start_time) * 1000
+                if client:
+                    try:
+                        trace.update(
+                            output={
+                                "status": "error",
+                                "error": str(e),
+                                "duration_ms": duration_ms,
+                            },
+                            error=True,
+                        )
+                    except:
+                        pass
+                raise
+
+        return wrapper
+
+    return decorator
 
 
 # Example usage

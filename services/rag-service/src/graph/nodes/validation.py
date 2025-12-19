@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from graph.state import RAGState
 from llm.client import get_planning_llm, invoke_llm
 from shared.utils.logger import get_logger
+from shared.utils.opik_tracer import track_langgraph_node
 
 logger = get_logger(__name__)
 
@@ -21,6 +22,7 @@ class HallucinationCheckOutput(BaseModel):
     explanation: str
 
 
+@track_langgraph_node("validate_grounding", "validation")
 async def validate_grounding(state: RAGState) -> dict[str, Any]:
     """
     Validate that answer is fully grounded in retrieved sources.

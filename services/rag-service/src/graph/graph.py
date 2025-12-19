@@ -21,6 +21,7 @@ from graph.nodes.synthesis import (
 from graph.nodes.validation import validate_grounding
 from graph.state import RAGState
 from shared.utils.logger import get_logger
+from shared.utils.opik_tracer import track_rag_pipeline
 
 logger = get_logger(__name__)
 
@@ -204,6 +205,7 @@ def compile_rag_graph() -> StateGraph:
 # ===== Convenience function for running the graph =====
 
 
+@track_rag_pipeline("eu_compliance_rag")
 async def run_rag_pipeline(query: str, conversation_id: str | None = None) -> RAGState:
     """
     Run the complete RAG pipeline on a query.

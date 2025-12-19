@@ -2,10 +2,12 @@
 
 from functools import lru_cache
 import asyncio
+import time
 from typing import Literal
 
 from shared.config.settings import get_settings
 from shared.utils.logger import get_logger
+from shared.utils.opik_tracer import trace_context, log_metric
 
 settings = get_settings()
 logger = get_logger(__name__)
@@ -126,9 +128,129 @@ async def invoke_llm(llm, input_data):
     Invoke LLM with async-first strategy and sync fallback.
 
     Some environments have broken async DNS; fallback uses sync invoke in a thread.
+    Includes Opik tracing for observability.
     """
-    try:
-        return await llm.ainvoke(input_data)
-    except Exception as exc:
-        logger.warning(f"Async LLM call failed, falling back to sync invoke: {exc}")
-        return await asyncio.to_thread(llm.invoke, input_data)
+    start_time = time.time()
+
+    # Extract model info for tracing
+    model_name = getattr(llm, "model_name", "unknown")
+    provider = "anthropic" if "claude" in model_name.lower() else "openai"
+
+    # Prepare input text for logging
+    if isinstance(input_data, list):
+        input_text = "\n".join([msg.content if hasattr(msg, 'content') else str(msg) for msg in input_data])
+    else:
+        input_text = str(input_data)
+
+    with trace_context(
+        name=f"llm_call_{model_name}",
+        tags=["llm", provider, "conformai"],
+        metadata={
+            "model": model_name,
+            "provider": provider,
+            "input_length": len(input_text),
+        }
+    ) as trace:
+        try:
+            # Log input
+            if trace:
+                trace.log_input({"prompt": input_text[:1000]})  # First 1000 chars
+
+            # Execute LLM call
+            response = await llm.ainvoke(input_data)
+
+            # Calculate metrics
+            duration_ms = (time.time() - start_time) * 1000
+            output_text = response.content if hasattr(response, 'content') else str(response)
+
+            # Extract token usage if available
+            tokens_used = 0
+            if hasattr(response, 'response_metadata'):
+                usage = response.response_metadata.get('usage', {})
+                tokens_used = usage.get('total_tokens', 0)
+
+            # Log output
+            if trace:
+                trace.log_output({
+                    "response": output_text[:1000],  # First 1000 chars
+                    "tokens_used": tokens_used,
+                })
+                trace.update(output={
+                    "status": "success",
+                    "duration_ms": duration_ms,
+                    "tokens_used": tokens_used,
+                    "output_length": len(output_text),
+                })
+
+            # Log metrics to Opik
+            log_metric("llm_call_duration_ms", duration_ms, {"model": model_name, "provider": provider})
+            if tokens_used > 0:
+                log_metric("llm_tokens_used", tokens_used, {"model": model_name, "provider": provider})
+
+            # Log to production logger
+            logger.log_llm_call(
+                model=model_name,
+                provider=provider,
+                duration_ms=duration_ms,
+                tokens_used=tokens_used,
+                input_length=len(input_text),
+                output_length=len(output_text),
+            )
+
+            return response
+
+        except Exception as exc:
+            # Try sync fallback
+            logger.warning(f"Async LLM call failed, falling back to sync invoke: {exc}")
+
+            try:
+                response = await asyncio.to_thread(llm.invoke, input_data)
+
+                duration_ms = (time.time() - start_time) * 1000
+                output_text = response.content if hasattr(response, 'content') else str(response)
+
+                if trace:
+                    trace.log_output({"response": output_text[:1000]})
+                    trace.update(output={
+                        "status": "success_fallback",
+                        "duration_ms": duration_ms,
+                        "fallback": "sync",
+                    })
+
+                log_metric("llm_call_duration_ms", duration_ms, {"model": model_name, "provider": provider, "fallback": "true"})
+
+                # Log fallback success
+                logger.warning(
+                    f"LLM call succeeded with sync fallback after async failure",
+                    extra={
+                        "llm_provider": provider,
+                        "llm_model": model_name,
+                        "duration_ms": duration_ms,
+                        "fallback": True,
+                    }
+                )
+
+                return response
+
+            except Exception as final_exc:
+                # Both attempts failed
+                duration_ms = (time.time() - start_time) * 1000
+
+                if trace:
+                    trace.update(output={
+                        "status": "error",
+                        "error": str(final_exc),
+                        "duration_ms": duration_ms,
+                    }, error=True)
+
+                # Log LLM failure
+                logger.log_error_with_context(
+                    message="LLM call failed completely (async and sync)",
+                    error=final_exc,
+                    llm_provider=provider,
+                    llm_model=model_name,
+                    duration_ms=duration_ms,
+                    input_length=len(input_text),
+                )
+
+                raise

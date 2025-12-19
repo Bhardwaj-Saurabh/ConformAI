@@ -2,6 +2,7 @@
 
 import asyncio
 import httpx
+import time
 from typing import Any
 
 from langchain_core.tools import tool
@@ -10,6 +11,7 @@ from pydantic import BaseModel, Field
 from shared.config.settings import get_settings
 from shared.models.legal_document import Chunk
 from shared.utils.logger import get_logger
+from shared.utils.opik_tracer import trace_context, log_metric
 
 settings = get_settings()
 logger = get_logger(__name__)
@@ -92,39 +94,102 @@ async def retrieve_legal_chunks(
             top_k=10
         )
     """
-    try:
-        # Call Retrieval Service
-        retrieval_service_url = (
-            f"http://{settings.retrieval_service_host}:"
-            f"{settings.retrieval_service_port}/api/v1/retrieve"
-        )
+    start_time = time.time()
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                retrieval_service_url,
-                json={"query": query, "filters": filters or {}, "top_k": top_k},
+    with trace_context(
+        name="retrieve_legal_chunks",
+        tags=["retrieval", "agent_tool", "conformai"],
+        metadata={
+            "query": query[:200],
+            "filters": filters or {},
+            "top_k": top_k,
+        }
+    ) as trace:
+        try:
+            # Log input
+            if trace:
+                trace.log_input({
+                    "query": query,
+                    "filters": filters,
+                    "top_k": top_k,
+                })
+
+            # Call Retrieval Service
+            retrieval_service_url = (
+                f"http://{settings.retrieval_service_host}:"
+                f"{settings.retrieval_service_port}/api/v1/retrieve"
             )
 
-            if response.status_code == 200:
-                result = response.json()
-                chunks = result.get("chunks", [])
-                logger.info(
-                    f"Retrieved {len(chunks)} chunks for query: {query[:50]}..."
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    retrieval_service_url,
+                    json={"query": query, "filters": filters or {}, "top_k": top_k},
                 )
-                return chunks
-            else:
-                logger.error(
-                    f"Retrieval service error: {response.status_code} - {response.text}"
-                )
-                return []
 
-    except httpx.RequestError as e:
-        logger.error(f"Failed to connect to retrieval service: {e}")
-        # Fallback: Direct Qdrant query (implement if needed)
-        return []
-    except Exception as e:
-        logger.error(f"Error in retrieve_legal_chunks: {e}")
-        return []
+                duration_ms = (time.time() - start_time) * 1000
+
+                if response.status_code == 200:
+                    result = response.json()
+                    chunks = result.get("chunks", [])
+                    logger.info(
+                        f"Retrieved {len(chunks)} chunks for query: {query[:50]}..."
+                    )
+
+                    # Log output
+                    if trace:
+                        trace.log_output({
+                            "chunks_count": len(chunks),
+                            "status": "success",
+                        })
+                        trace.update(output={
+                            "status": "success",
+                            "chunks_retrieved": len(chunks),
+                            "duration_ms": duration_ms,
+                        })
+
+                    # Log metrics
+                    log_metric("retrieval_duration_ms", duration_ms, {"top_k": str(top_k)})
+                    log_metric("chunks_retrieved", len(chunks), {"top_k": str(top_k)})
+
+                    return chunks
+                else:
+                    logger.error(
+                        f"Retrieval service error: {response.status_code} - {response.text}"
+                    )
+
+                    if trace:
+                        trace.update(output={
+                            "status": "error",
+                            "error": f"HTTP {response.status_code}",
+                            "duration_ms": duration_ms,
+                        }, error=True)
+
+                    return []
+
+        except httpx.RequestError as e:
+            duration_ms = (time.time() - start_time) * 1000
+            logger.error(f"Failed to connect to retrieval service: {e}")
+
+            if trace:
+                trace.update(output={
+                    "status": "error",
+                    "error": f"Connection failed: {str(e)}",
+                    "duration_ms": duration_ms,
+                }, error=True)
+
+            return []
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
+            logger.error(f"Error in retrieve_legal_chunks: {e}")
+
+            if trace:
+                trace.update(output={
+                    "status": "error",
+                    "error": str(e),
+                    "duration_ms": duration_ms,
+                }, error=True)
+
+            return []
 
 
 @tool(args_schema=AnswerInput)

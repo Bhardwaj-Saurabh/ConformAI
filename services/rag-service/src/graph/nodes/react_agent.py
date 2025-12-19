@@ -11,6 +11,7 @@ from agent.tools import AGENT_TOOLS
 from graph.state import AgentAction, RAGState
 from llm.client import get_planning_llm, invoke_llm
 from shared.utils.logger import get_logger
+from shared.utils.opik_tracer import track_langgraph_node
 
 logger = get_logger(__name__)
 
@@ -24,6 +25,7 @@ class AgentDecision(BaseModel):
     is_final: bool = False  # Whether agent is done
 
 
+@track_langgraph_node("react_plan", "agent")
 async def react_plan(state: RAGState) -> dict[str, Any]:
     """
     Agent decides next action based on current state (PLAN step).
@@ -138,6 +140,7 @@ Example:
         return state
 
 
+@track_langgraph_node("react_act", "agent")
 async def react_act(state: RAGState) -> dict[str, Any]:
     """
     Execute the planned action (ACT step).
@@ -223,6 +226,7 @@ async def react_act(state: RAGState) -> dict[str, Any]:
         return state
 
 
+@track_langgraph_node("react_observe", "agent")
 async def react_observe(state: RAGState) -> dict[str, Any]:
     """
     Observe results and decide whether to continue (OBSERVE step).

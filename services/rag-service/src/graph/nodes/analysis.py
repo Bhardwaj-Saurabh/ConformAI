@@ -10,6 +10,7 @@ from graph.state import RAGState, SubQuery
 from llm.client import get_planning_llm, invoke_llm
 from shared.models.legal_document import AIDomain, RiskCategory
 from shared.utils.logger import get_logger
+from shared.utils.opik_tracer import track_langgraph_node
 
 logger = get_logger(__name__)
 
@@ -35,6 +36,7 @@ class QueryDecompositionOutput(BaseModel):
     sub_questions: list[SubQuestionData]
 
 
+@track_langgraph_node("analyze_query", "analysis")
 async def analyze_query(state: RAGState) -> dict[str, Any]:
     """
     Analyze query to understand intent, domain, and complexity.
@@ -134,6 +136,7 @@ Return ONLY the JSON, no additional text."""
         return state
 
 
+@track_langgraph_node("decompose_query", "analysis")
 async def decompose_query(state: RAGState) -> dict[str, Any]:
     """
     Decompose complex queries into sub-questions.
@@ -235,6 +238,7 @@ IMPORTANT: Each sub-question should be answerable independently using legal docu
         return state
 
 
+@track_langgraph_node("safety_check", "validation")
 async def safety_check(state: RAGState) -> dict[str, Any]:
     """
     Perform safety pre-check to reject out-of-scope or harmful queries.

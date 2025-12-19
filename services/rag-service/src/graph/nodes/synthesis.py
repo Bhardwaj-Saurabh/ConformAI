@@ -8,10 +8,12 @@ from langchain_core.messages import HumanMessage
 from graph.state import Citation, RAGState
 from llm.client import get_generation_llm, invoke_llm
 from shared.utils.logger import get_logger
+from shared.utils.opik_tracer import track_langgraph_node
 
 logger = get_logger(__name__)
 
 
+@track_langgraph_node("synthesize_answer", "synthesis")
 async def synthesize_answer(state: RAGState) -> dict[str, Any]:
     """
     Synthesize final answer from intermediate answers or direct generation.
@@ -145,6 +147,7 @@ ANSWER:"""
         return state
 
 
+@track_langgraph_node("format_response", "synthesis")
 async def format_response(state: RAGState) -> dict[str, Any]:
     """
     Format final response with citations, disclaimer, and metadata.

@@ -17,7 +17,8 @@ from api.schemas import (
 )
 from graph.graph import run_rag_pipeline
 from shared.config.settings import get_settings
-from shared.utils.logger import get_logger
+from shared.utils.logger import get_logger, set_request_context, clear_request_context
+from shared.utils.opik_tracer import get_opik_client, log_metric, log_event
 
 # Import health check router
 try:
@@ -39,10 +40,27 @@ async def lifespan(app: FastAPI):
     logger.info(f"LLM Provider: {settings.llm_provider}")
     logger.info(f"LLM Model: {settings.llm_model}")
 
+    # Initialize Opik client
+    if settings.opik_enabled:
+        opik_client = get_opik_client()
+        if opik_client:
+            logger.info("✓ Opik observability enabled")
+            log_event("rag_service_started", {
+                "llm_provider": settings.llm_provider,
+                "llm_model": settings.llm_model,
+                "environment": settings.environment,
+            })
+        else:
+            logger.warning("⚠ Opik observability disabled (initialization failed)")
+    else:
+        logger.info("Opik observability disabled")
+
     yield
 
     # Shutdown
     logger.info("Shutting down RAG service...")
+    if settings.opik_enabled:
+        log_event("rag_service_shutdown", {"environment": settings.environment})
 
 
 # Create FastAPI app
@@ -53,17 +71,52 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Add request ID middleware for tracking
+# Add request ID middleware for tracking and logging
 @app.middleware("http")
-async def add_request_id(request, call_next):
-    """Add request ID to all requests for tracking."""
+async def add_request_id_and_logging(request, call_next):
+    """Add request ID to all requests for tracking and set logging context."""
     import uuid
+
     request_id = str(uuid.uuid4())
     request.state.request_id = request_id
 
-    response = await call_next(request)
-    response.headers["X-Request-ID"] = request_id
-    return response
+    # Set request context for logging
+    set_request_context(request_id=request_id)
+
+    # Log incoming request
+    logger.info(
+        f"Incoming request: {request.method} {request.url.path}",
+        extra={
+            "http_method": request.method,
+            "path": request.url.path,
+            "query_params": str(request.query_params),
+            "client_host": request.client.host if request.client else None,
+        }
+    )
+
+    start_time = time.time()
+
+    try:
+        response = await call_next(request)
+
+        # Calculate request duration
+        duration_ms = (time.time() - start_time) * 1000
+
+        # Log request completion
+        logger.log_api_request(
+            method=request.method,
+            endpoint=request.url.path,
+            status_code=response.status_code,
+            duration_ms=duration_ms,
+        )
+
+        response.headers["X-Request-ID"] = request_id
+
+        return response
+
+    finally:
+        # Clear request context
+        clear_request_context()
 
 # Add CORS middleware
 app.add_middleware(
@@ -135,7 +188,35 @@ async def query_compliance(request: QueryRequest):
     """
     start_time = time.time()
 
-    logger.info(f"Received query: {request.query[:100]}...")
+    # Set conversation context if provided
+    if request.conversation_id:
+        set_request_context(conversation_id=request.conversation_id)
+
+    logger.info(
+        f"Processing compliance query",
+        extra={
+            "query_length": len(request.query),
+            "query_preview": request.query[:100],
+            "max_iterations": request.max_iterations,
+            "has_conversation_id": bool(request.conversation_id),
+        }
+    )
+
+    # Log audit event
+    logger.log_audit(
+        action="query_received",
+        resource="rag_pipeline",
+        result="processing",
+        query_length=len(request.query),
+        max_iterations=request.max_iterations,
+    )
+
+    # Log request event to Opik
+    log_event("query_received", {
+        "query_length": len(request.query),
+        "max_iterations": request.max_iterations,
+        "has_conversation_id": bool(request.conversation_id),
+    })
 
     try:
         # Update max iterations if provided
@@ -199,14 +280,83 @@ async def query_compliance(request: QueryRequest):
             ],
         )
 
+        api_duration_ms = (time.time() - start_time) * 1000
+
+        # Log successful completion with performance metrics
+        logger.log_performance(
+            operation="query_compliance",
+            duration_ms=api_duration_ms,
+            pipeline_duration_ms=result.get('processing_time_ms', 0),
+            confidence_score=result.get("confidence_score", 0.0),
+            iterations=result.get("iteration_count", 0),
+            llm_calls=result.get("total_llm_calls", 0),
+            tokens_used=result.get("total_tokens_used", 0),
+            citations_count=len(result.get("citations", [])),
+        )
+
+        # Log audit event
+        logger.log_audit(
+            action="query_completed",
+            resource="rag_pipeline",
+            result="success",
+            confidence_score=result.get("confidence_score", 0.0),
+            iterations=result.get("iteration_count", 0),
+            answer_length=len(result.get("final_answer", "")),
+        )
+
+        # Log metrics to Opik
+        log_metric("api_request_duration_ms", api_duration_ms, {
+            "endpoint": "query",
+            "success": "true",
+        })
+        log_event("query_completed", {
+            "success": True,
+            "duration_ms": api_duration_ms,
+            "confidence_score": result.get("confidence_score", 0.0),
+            "iterations": result.get("iteration_count", 0),
+        })
+
         logger.info(
-            f"Query processed successfully in {result.get('processing_time_ms', 0):.0f}ms"
+            f"✓ Query processed successfully",
+            extra={
+                "total_duration_ms": api_duration_ms,
+                "confidence_score": result.get("confidence_score", 0.0),
+            }
         )
 
         return response
 
     except Exception as e:
-        logger.error(f"Error processing query: {e}", exc_info=True)
+        api_duration_ms = (time.time() - start_time) * 1000
+
+        # Log error with full context
+        logger.log_error_with_context(
+            message="Failed to process compliance query",
+            error=e,
+            query_length=len(request.query),
+            max_iterations=request.max_iterations,
+            duration_ms=api_duration_ms,
+        )
+
+        # Log audit event for failure
+        logger.log_audit(
+            action="query_failed",
+            resource="rag_pipeline",
+            result="error",
+            error_type=type(e).__name__,
+            error_message=str(e),
+        )
+
+        # Log error metrics to Opik
+        log_metric("api_request_duration_ms", api_duration_ms, {
+            "endpoint": "query",
+            "success": "false",
+            "error": "true",
+        })
+        log_event("query_failed", {
+            "error": str(e),
+            "duration_ms": api_duration_ms,
+        })
 
         raise HTTPException(
             status_code=500,
