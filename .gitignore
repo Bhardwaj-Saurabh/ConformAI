@@ -9,8 +9,13 @@ __pycache__/
 claude.md
 .claude/
 
-#data
+# Data directories (raw documents, processed data, embeddings, logs)
 data/
+data/raw/
+data/processed/
+data/embeddings/
+airflow/logs/
+*.log
 
 # Distribution / packaging
 .Python
