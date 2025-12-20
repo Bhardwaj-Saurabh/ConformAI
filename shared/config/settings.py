@@ -101,11 +101,15 @@ class Settings(BaseSettings):
 
     # Security (Loaded from .env)
     api_key_header: str = Field(alias="API_KEY_HEADER")
+    api_keys_enabled: bool = Field(default=False, alias="API_KEYS_ENABLED")
+    valid_api_keys: str = Field(default="", alias="API_KEYS")  # Comma-separated list
     jwt_secret_key: str = Field(alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(alias="JWT_ALGORITHM")
     jwt_expiration_minutes: int = Field(alias="JWT_EXPIRATION_MINUTES")
 
     # Rate Limiting (Loaded from .env)
+    api_rate_limit_per_minute: int = Field(default=60, alias="RATE_LIMIT_PER_MINUTE")
+    api_rate_limit_per_hour: int = Field(default=1000, alias="RATE_LIMIT_PER_HOUR")
     rate_limit_per_minute: int = Field(alias="RATE_LIMIT_PER_MINUTE")
     rate_limit_per_hour: int = Field(alias="RATE_LIMIT_PER_HOUR")
 

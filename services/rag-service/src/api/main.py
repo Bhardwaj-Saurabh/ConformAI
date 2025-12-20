@@ -133,6 +133,98 @@ if HEALTH_ROUTER_AVAILABLE:
     logger.info("Comprehensive health check endpoints enabled")
 
 
+# ===== Global Error Handlers =====
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc: HTTPException):
+    """Handle HTTP exceptions with structured error response."""
+    request_id = getattr(request.state, "request_id", "unknown")
+
+    logger.warning(
+        f"HTTP exception: {exc.status_code} - {exc.detail}",
+        extra={
+            "status_code": exc.status_code,
+            "detail": exc.detail,
+            "path": request.url.path,
+        },
+    )
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": exc.detail,
+            "status_code": exc.status_code,
+            "request_id": request_id,
+            "timestamp": time.time(),
+        },
+    )
+
+
+@app.exception_handler(ValueError)
+async def value_error_handler(request, exc: ValueError):
+    """Handle ValueError exceptions (invalid input)."""
+    request_id = getattr(request.state, "request_id", "unknown")
+
+    logger.log_error_with_context(
+        message="Invalid input value",
+        error=exc,
+        path=request.url.path,
+        request_id=request_id,
+    )
+
+    return JSONResponse(
+        status_code=400,
+        content={
+            "error": "Invalid input",
+            "detail": str(exc),
+            "request_id": request_id,
+            "timestamp": time.time(),
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc: Exception):
+    """
+    Global exception handler for uncaught exceptions.
+
+    Logs error with full context and returns structured error response.
+    """
+    request_id = getattr(request.state, "request_id", "unknown")
+
+    logger.log_error_with_context(
+        message="Unhandled exception in request processing",
+        error=exc,
+        path=request.url.path,
+        method=request.method,
+        request_id=request_id,
+    )
+
+    # Log to Opik if enabled
+    if settings.opik_enabled:
+        try:
+            log_event("rag_service_error", {
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+                "request_id": request_id,
+                "path": request.url.path,
+            })
+        except Exception as opik_error:
+            logger.warning(f"Failed to log error to Opik: {opik_error}")
+
+    # Return generic error to client (don't expose internal details)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "message": "An unexpected error occurred while processing your request",
+            "request_id": request_id,
+            "timestamp": time.time(),
+        },
+    )
+
+
 # ===== Routes =====
 
 
@@ -150,16 +242,8 @@ async def root():
     }
 
 
-@app.get("/health", response_model=HealthResponse)
-async def health_check():
-    """Health check endpoint."""
-    return HealthResponse(
-        status="healthy",
-        service="rag-service",
-        version="1.0.0",
-        llm_provider=settings.llm_provider,
-        llm_model=settings.llm_model,
-    )
+# Note: Comprehensive health check endpoints are provided by health_router
+# Includes: /health, /health/ready, /health/live, /health/startup, /metrics
 
 
 @app.post("/api/v1/query", response_model=QueryResponse)

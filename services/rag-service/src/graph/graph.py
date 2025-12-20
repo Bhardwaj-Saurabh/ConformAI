@@ -40,22 +40,57 @@ def should_continue_react(
         "synthesize" to move to synthesis
     """
     agent_state = state.get("agent_state", "done")
+    iteration_count = state.get("iteration_count", 0)
+    max_iterations = state.get("max_iterations", 5)
+
+    logger.debug(
+        "ReAct loop decision point",
+        extra={
+            "agent_state": agent_state,
+            "iteration_count": iteration_count,
+            "max_iterations": max_iterations,
+            "has_error": bool(state.get("error")),
+            "retrieved_chunks_count": len(state.get("all_retrieved_chunks", [])),
+        },
+    )
 
     # Check if agent marked as done
     if agent_state == "done":
+        logger.info(
+            "ReAct loop complete - Agent marked as done",
+            extra={
+                "iterations_used": iteration_count,
+                "total_retrievals": len(state.get("retrieval_history", [])),
+                "total_actions": len(state.get("agent_actions", [])),
+            },
+        )
         return "synthesize"
 
     # Check iteration limit
-    if state.get("iteration_count", 0) >= state.get("max_iterations", 5):
-        logger.warning("Max iterations reached, moving to synthesis")
+    if iteration_count >= max_iterations:
+        logger.warning(
+            "ReAct loop terminated - Max iterations reached",
+            extra={
+                "max_iterations": max_iterations,
+                "total_retrievals": len(state.get("retrieval_history", [])),
+                "last_action": state.get("agent_actions", [])[-1].action if state.get("agent_actions") else None,
+            },
+        )
         return "synthesize"
 
     # Check if error occurred
     if state.get("error"):
-        logger.error(f"Error occurred: {state['error']}, stopping loop")
+        logger.error(
+            "ReAct loop terminated - Error occurred",
+            extra={"error": state["error"], "iteration_count": iteration_count},
+        )
         return "synthesize"
 
     # Continue planning
+    logger.debug(
+        "ReAct loop continuing",
+        extra={"next_iteration": iteration_count + 1, "max_iterations": max_iterations},
+    )
     return "continue_planning"
 
 
@@ -70,10 +105,30 @@ def should_refuse(state: RAGState) -> Literal["continue", "refuse"]:
         "continue" to proceed with processing
         "refuse" to skip to response formatting with refusal
     """
-    if not state.get("is_safe", True):
-        logger.warning(f"Query refused: {state.get('refusal_reason')}")
+    is_safe = state.get("is_safe", True)
+    refusal_reason = state.get("refusal_reason")
+
+    logger.debug(
+        "Safety check decision point",
+        extra={
+            "is_safe": is_safe,
+            "has_refusal_reason": bool(refusal_reason),
+            "query_length": len(state.get("query", "")),
+        },
+    )
+
+    if not is_safe:
+        logger.warning(
+            "Query refused - Safety concerns",
+            extra={
+                "refusal_reason": refusal_reason,
+                "query_preview": state.get("query", "")[:100],
+                "intent": state.get("intent"),
+            },
+        )
         return "refuse"
 
+    logger.debug("Safety check passed - Proceeding to ReAct agent")
     return "continue"
 
 
@@ -228,33 +283,145 @@ async def run_rag_pipeline(query: str, conversation_id: str | None = None) -> RA
 
     start_time = time.time()
 
-    logger.info(f"Running RAG pipeline for query: {query[:100]}...")
+    logger.info(
+        "╔═══════════════════════════════════════════════════════════════════╗",
+    )
+    logger.info(
+        "║                 STARTING RAG PIPELINE EXECUTION                   ║",
+    )
+    logger.info(
+        "╚═══════════════════════════════════════════════════════════════════╝",
+    )
+
+    logger.info(
+        "Pipeline initialization",
+        extra={
+            "query": query,
+            "query_length": len(query),
+            "conversation_id": conversation_id,
+            "timestamp": time.time(),
+        },
+    )
 
     # Create initial state
+    logger.debug("Creating initial state")
     initial_state = create_initial_state(query, conversation_id)
 
+    logger.debug(
+        "Initial state created",
+        extra={
+            "max_iterations": initial_state.get("max_iterations"),
+            "state_keys": list(initial_state.keys()),
+        },
+    )
+
     # Compile graph
+    logger.debug("Compiling RAG graph")
     graph = compile_rag_graph()
 
     # Execute
     try:
+        logger.info("▶ Executing RAG graph workflow")
+
         final_state = await graph.ainvoke(initial_state)
 
         # Calculate processing time
         processing_time = (time.time() - start_time) * 1000  # ms
         final_state["processing_time_ms"] = processing_time
 
+        # Comprehensive completion logging
         logger.info(
-            f"RAG pipeline completed in {processing_time:.0f}ms. "
-            f"Confidence: {final_state.get('confidence_score', 0):.2f}"
+            "╔═══════════════════════════════════════════════════════════════════╗",
+        )
+        logger.info(
+            "║              RAG PIPELINE COMPLETED SUCCESSFULLY                  ║",
+        )
+        logger.info(
+            "╚═══════════════════════════════════════════════════════════════════╝",
+        )
+
+        logger.log_performance(
+            operation="rag_pipeline_execution",
+            duration_ms=processing_time,
+            confidence_score=final_state.get("confidence_score", 0),
+            iterations_used=final_state.get("iteration_count", 0),
+            chunks_retrieved=len(final_state.get("all_retrieved_chunks", [])),
+            citations_count=len(final_state.get("citations", [])),
+            answer_length=len(final_state.get("final_answer", "")),
+            was_refused=bool(final_state.get("refusal_reason")),
+            grounding_validated=final_state.get("grounding_validated", False),
+        )
+
+        logger.info(
+            "Pipeline results summary",
+            extra={
+                "processing_time_ms": processing_time,
+                "confidence_score": final_state.get("confidence_score", 0),
+                "iterations_used": final_state.get("iteration_count", 0),
+                "max_iterations": final_state.get("max_iterations", 5),
+                "total_retrievals": len(final_state.get("retrieval_history", [])),
+                "total_chunks_retrieved": len(final_state.get("all_retrieved_chunks", [])),
+                "unique_regulations": len(
+                    set(chunk.get("regulation", "") for chunk in final_state.get("all_retrieved_chunks", []))
+                ),
+                "citations_count": len(final_state.get("citations", [])),
+                "answer_length": len(final_state.get("final_answer", "")),
+                "was_refused": bool(final_state.get("refusal_reason")),
+                "grounding_validated": final_state.get("grounding_validated", False),
+                "sub_queries_count": len(final_state.get("sub_queries", [])),
+                "agent_actions_count": len(final_state.get("agent_actions", [])),
+                "query_complexity": final_state.get("query_complexity"),
+                "intent": final_state.get("intent"),
+                "ai_domain": final_state.get("ai_domain"),
+            },
+        )
+
+        # Log audit trail
+        logger.log_audit(
+            action="rag_pipeline_completed",
+            resource="compliance_query",
+            result="success",
+            processing_time_ms=processing_time,
+            confidence_score=final_state.get("confidence_score", 0),
+            was_refused=bool(final_state.get("refusal_reason")),
         )
 
         return final_state
 
     except Exception as e:
-        logger.error(f"Error running RAG pipeline: {e}", exc_info=True)
+        processing_time = (time.time() - start_time) * 1000
+
+        logger.error(
+            "╔═══════════════════════════════════════════════════════════════════╗",
+        )
+        logger.error(
+            "║                RAG PIPELINE EXECUTION FAILED                      ║",
+        )
+        logger.error(
+            "╚═══════════════════════════════════════════════════════════════════╝",
+        )
+
+        logger.log_error_with_context(
+            message="RAG pipeline execution failed",
+            error=e,
+            query=query,
+            processing_time_ms=processing_time,
+            conversation_id=conversation_id,
+        )
+
+        logger.log_audit(
+            action="rag_pipeline_failed",
+            resource="compliance_query",
+            result="error",
+            error_type=type(e).__name__,
+            error_message=str(e),
+            processing_time_ms=processing_time,
+        )
+
         # Return state with error
         initial_state["error"] = str(e)
         initial_state["final_answer"] = ""
         initial_state["refusal_reason"] = f"An error occurred during processing: {str(e)}"
+        initial_state["processing_time_ms"] = processing_time
+
         return initial_state

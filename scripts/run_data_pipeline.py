@@ -23,6 +23,7 @@ sys.path.insert(0, str(data_pipeline_root))
 
 from chunking import LegalChunker
 from clients import EURLexClient
+from data_pipeline_logging_utils import PipelineStageLogger, log_validation_result
 from embeddings import EmbeddingGenerator
 from indexing import QdrantIndexer
 from parsers import LegalDocumentParser
@@ -77,9 +78,30 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    import time
+
+    pipeline_start_time = time.time()
+
     args = _parse_args()
     settings = get_settings()
     logger = get_logger(__name__)
+
+    # Visual pipeline start
+    logger.info("╔═══════════════════════════════════════════════════════════════════╗")
+    logger.info("║              STARTING DATA PIPELINE EXECUTION                     ║")
+    logger.info("╚═══════════════════════════════════════════════════════════════════╝")
+
+    logger.info(
+        "Pipeline configuration",
+        extra={
+            "limit": args.limit,
+            "start_date": args.start_date,
+            "recreate_collection": args.recreate_collection,
+            "download_format": args.download_format,
+            "eurlex_timeout": args.eurlex_timeout,
+            "eurlex_retries": args.eurlex_retries,
+        },
+    )
 
     try:
         start_date = date.fromisoformat(args.start_date)
@@ -98,6 +120,19 @@ def main() -> int:
     chunks_dir.mkdir(parents=True, exist_ok=True)
     embeddings_dir.mkdir(parents=True, exist_ok=True)
 
+    logger.debug(
+        "Data directories initialized",
+        extra={
+            "raw_dir": str(raw_dir),
+            "processed_dir": str(processed_dir),
+            "chunks_dir": str(chunks_dir),
+            "embeddings_dir": str(embeddings_dir),
+        },
+    )
+
+    # Stage 1: Document Discovery and Download
+    download_stage = PipelineStageLogger("document_download", "download")
+    download_stage.log_start(limit=args.limit, start_date=start_date.isoformat())
     logger.info("Fetching AI-related EUR-Lex documents...")
     eurlex_client = EURLexClient(
         sparql_endpoint=settings.eurlex_api_base_url,
@@ -127,40 +162,72 @@ def main() -> int:
 
     if not celex_ids:
         logger.warning("No CELEX IDs available to process.")
+        download_stage.log_warning("No CELEX IDs found")
+        download_stage.log_complete(documents_found=0)
         eurlex_client.close()
         return 0
 
+    logger.info(f"Will process {len(celex_ids)} documents: {', '.join(celex_ids)}")
+
     downloaded_paths: list[Path] = []
-    for celex in celex_ids:
+    download_errors = 0
+
+    for idx, celex in enumerate(celex_ids, 1):
         output_path = raw_dir / f"{celex}.{args.download_format}"
+        download_stage.log_info(f"Downloading {idx}/{len(celex_ids)}: {celex}")
+
         try:
+            doc_start = time.time()
             eurlex_client.download_document_to_file(
                 celex=celex,
                 output_path=output_path,
                 format=args.download_format,
                 language="EN",
             )
+            doc_duration = (time.time() - doc_start) * 1000
+            file_size = output_path.stat().st_size
+
+            download_stage.log_info(
+                f"✓ Downloaded {celex} ({file_size:,} bytes, {doc_duration:.0f}ms)"
+            )
             downloaded_paths.append(output_path)
         except Exception as exc:
             logger.error(f"Failed to download {celex}: {exc}")
+            download_errors += 1
+
+    download_stage.log_complete(
+        documents_downloaded=len(downloaded_paths),
+        download_errors=download_errors,
+    )
 
     if not downloaded_paths:
         existing_raw = list(raw_dir.glob("*.xml")) + list(raw_dir.glob("*.html"))
         if existing_raw:
             logger.warning("No documents downloaded; using existing raw XML files.")
+            logger.info(f"Found {len(existing_raw)} existing raw files")
             downloaded_paths = existing_raw
         else:
-            logger.warning("No documents downloaded.")
+            logger.warning("No documents downloaded and no existing files found.")
             eurlex_client.close()
             return 0
 
+    # Stage 2: Document Parsing
+    parse_stage = PipelineStageLogger("document_parsing", "parse")
+    parse_stage.log_start(documents_count=len(downloaded_paths))
     logger.info("Parsing downloaded documents...")
     parser = LegalDocumentParser()
     parsed_docs: list[dict[str, str]] = []
+    parse_errors = 0
+    total_chapters = 0
+    total_articles = 0
 
-    for doc_path in downloaded_paths:
+    for idx, doc_path in enumerate(downloaded_paths, 1):
         celex = doc_path.stem
+        parse_stage.log_info(f"Parsing {idx}/{len(downloaded_paths)}: {celex}")
+
         try:
+            parse_start = time.time()
+
             try:
                 regulation = eurlex_client.extract_celex_metadata(celex)
             except Exception as exc:
@@ -172,19 +239,43 @@ def main() -> int:
             except Exception as exc:
                 logger.warning(f"Primary parse failed for {celex}: {exc}")
                 document = parser.parse_html(doc_path, regulation=regulation)
+
+            parse_duration = (time.time() - parse_start) * 1000
+
+            chapters_count = len(document.chapters)
+            articles_count = sum(len(ch.articles) for ch in document.chapters)
+            total_chapters += chapters_count
+            total_articles += articles_count
+
+            parse_stage.log_info(
+                f"✓ Parsed {celex}: {chapters_count} chapters, {articles_count} articles ({parse_duration:.0f}ms)"
+            )
+
             parsed_path = processed_dir / f"{celex}.pkl"
             with parsed_path.open("wb") as handle:
                 pickle.dump(document, handle)
+
             parsed_docs.append({"celex": celex, "path": str(parsed_path)})
         except Exception as exc:
             logger.error(f"Failed to parse {celex}: {exc}")
+            parse_errors += 1
 
     eurlex_client.close()
+
+    parse_stage.log_complete(
+        documents_parsed=len(parsed_docs),
+        parse_errors=parse_errors,
+        total_chapters=total_chapters,
+        total_articles=total_articles,
+    )
 
     if not parsed_docs:
         logger.warning("No documents parsed.")
         return 0
 
+    # Stage 3: Document Chunking
+    chunk_stage = PipelineStageLogger("document_chunking", "chunk")
+    chunk_stage.log_start(documents_count=len(parsed_docs))
     logger.info("Chunking parsed documents...")
     chunker = LegalChunker(
         max_chunk_tokens=settings.chunk_size,
@@ -194,9 +285,17 @@ def main() -> int:
     )
 
     chunked_docs: list[dict[str, str]] = []
-    for doc_info in parsed_docs:
+    chunk_errors = 0
+    total_chunks_created = 0
+    total_chunks_filtered = 0
+
+    for idx, doc_info in enumerate(parsed_docs, 1):
         celex = doc_info["celex"]
+        chunk_stage.log_info(f"Chunking {idx}/{len(parsed_docs)}: {celex}")
+
         try:
+            chunk_start = time.time()
+
             with Path(doc_info["path"]).open("rb") as handle:
                 document = pickle.load(handle)
 
@@ -210,8 +309,18 @@ def main() -> int:
             ]
 
             filtered_count = original_count - len(chunks)
+            total_chunks_filtered += filtered_count
+            total_chunks_created += len(chunks)
+
+            chunk_duration = (time.time() - chunk_start) * 1000
+            avg_chunk_length = sum(len(c.text) for c in chunks) / len(chunks) if chunks else 0
+
+            chunk_stage.log_info(
+                f"✓ Chunked {celex}: {len(chunks)} chunks (filtered: {filtered_count}, avg length: {avg_chunk_length:.0f} chars, {chunk_duration:.0f}ms)"
+            )
+
             if filtered_count > 0:
-                logger.info(f"Filtered out {filtered_count} problematic chunks from {celex}")
+                chunk_stage.log_debug(f"Filtered out {filtered_count} problematic chunks from {celex}")
 
             if not chunks:
                 logger.warning(f"No valid chunks for {celex} after filtering")
@@ -224,11 +333,23 @@ def main() -> int:
             chunked_docs.append({"celex": celex, "path": str(chunks_path)})
         except Exception as exc:
             logger.error(f"Failed to chunk {celex}: {exc}")
+            chunk_errors += 1
+
+    chunk_stage.log_complete(
+        documents_chunked=len(chunked_docs),
+        chunk_errors=chunk_errors,
+        total_chunks_created=total_chunks_created,
+        total_chunks_filtered=total_chunks_filtered,
+        avg_chunks_per_doc=total_chunks_created / len(chunked_docs) if chunked_docs else 0,
+    )
 
     if not chunked_docs:
         logger.warning("No documents chunked.")
         return 0
 
+    # Stage 4: Embedding Generation
+    embed_stage = PipelineStageLogger("embedding_generation", "embed")
+    embed_stage.log_start(documents_count=len(chunked_docs))
     logger.info("Generating embeddings...")
     generator = EmbeddingGenerator(
         model_name=settings.embedding_model,
@@ -238,7 +359,11 @@ def main() -> int:
     )
 
     embedded_docs: list[Path] = []
-    for doc_info in chunked_docs:
+    embed_errors = 0
+    total_embeddings_generated = 0
+    total_embeddings_skipped = 0
+
+    for idx, doc_info in enumerate(chunked_docs, 1):
         celex = doc_info["celex"]
         embedded_path = embeddings_dir / f"{celex}_embedded.pkl"
 
@@ -248,13 +373,16 @@ def main() -> int:
                 with embedded_path.open("rb") as handle:
                     existing_chunks = pickle.load(handle)
                 if existing_chunks and len(existing_chunks) > 0:
-                    logger.info(f"Using existing embeddings for {celex} ({len(existing_chunks)} chunks)")
+                    embed_stage.log_info(f"Using existing embeddings for {celex} ({len(existing_chunks)} chunks)")
+                    total_embeddings_skipped += len(existing_chunks)
                     embedded_docs.append(embedded_path)
                     continue
             except Exception:
                 logger.warning(f"Existing embeddings for {celex} are invalid, regenerating...")
 
         try:
+            embed_start = time.time()
+
             with Path(doc_info["path"]).open("rb") as handle:
                 chunks = pickle.load(handle)
 
@@ -262,26 +390,46 @@ def main() -> int:
                 logger.warning(f"No chunks to embed for {celex}")
                 continue
 
-            logger.info(f"Embedding {len(chunks)} chunks for {celex}...")
+            embed_stage.log_info(f"Embedding {idx}/{len(chunked_docs)}: {celex} ({len(chunks)} chunks)")
             embedded_chunks = generator.generate_embeddings(chunks, normalize=True)
+
+            embed_duration = (time.time() - embed_start) * 1000
 
             if not embedded_chunks or len(embedded_chunks) == 0:
                 logger.error(f"Embedding generation returned empty list for {celex}")
+                embed_errors += 1
                 continue
+
+            total_embeddings_generated += len(embedded_chunks)
+            throughput = len(embedded_chunks) / (embed_duration / 1000) if embed_duration > 0 else 0
+
+            embed_stage.log_info(
+                f"✓ Embedded {celex}: {len(embedded_chunks)} embeddings ({embed_duration:.0f}ms, {throughput:.1f} emb/sec)"
+            )
 
             with embedded_path.open("wb") as handle:
                 pickle.dump(embedded_chunks, handle)
 
-            logger.info(f"✓ Saved {len(embedded_chunks)} embeddings for {celex}")
             embedded_docs.append(embedded_path)
         except Exception as exc:
             logger.error(f"Failed to embed {celex}: {exc}")
             logger.error("You can re-run the pipeline to retry this document")
+            embed_errors += 1
+
+    embed_stage.log_complete(
+        documents_embedded=len(embedded_docs),
+        embed_errors=embed_errors,
+        total_embeddings_generated=total_embeddings_generated,
+        total_embeddings_skipped=total_embeddings_skipped,
+    )
 
     if not embedded_docs:
         logger.warning("No embeddings generated.")
         return 0
 
+    # Stage 5: Indexing to Qdrant
+    index_stage = PipelineStageLogger("qdrant_indexing", "index")
+    index_stage.log_start(documents_count=len(embedded_docs))
     logger.info("Indexing embeddings into Qdrant...")
     indexer = QdrantIndexer()
     indexer.create_collection(recreate=args.recreate_collection)
