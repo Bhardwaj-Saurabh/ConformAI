@@ -98,6 +98,21 @@ services:
       - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY:-secret}
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=True
+      # SMTP Configuration for Email Notifications
+      - AIRFLOW__SMTP__SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - AIRFLOW__SMTP__SMTP_PORT=${SMTP_PORT:-587}
+      - AIRFLOW__SMTP__SMTP_USER=${SMTP_USER:-}
+      - AIRFLOW__SMTP__SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - AIRFLOW__SMTP__SMTP_MAIL_FROM=${SMTP_FROM:-noreply@conformai.com}
+      - AIRFLOW__SMTP__SMTP_STARTTLS=True
+      - AIRFLOW__SMTP__SMTP_SSL=False
+      # API Keys and Application Config
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - QDRANT_COLLECTION_NAME=${QDRANT_COLLECTION_NAME:-eu_legal_documents}
+      - ALERT_EMAIL=${ALERT_EMAIL:-admin@conformai.com}
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/plugins:/opt/airflow/plugins
@@ -133,6 +148,21 @@ services:
       - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://${POSTGRES_USER:-conformai}:${POSTGRES_PASSWORD:-conformai_password}@postgres:5432/${POSTGRES_DB:-conformai}
       - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY:-FB0o_zt4e3Ziq3LdUUO7F2Z95cvFFx16hU8jTeR1ASM=}
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      # SMTP Configuration for Email Notifications
+      - AIRFLOW__SMTP__SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - AIRFLOW__SMTP__SMTP_PORT=${SMTP_PORT:-587}
+      - AIRFLOW__SMTP__SMTP_USER=${SMTP_USER:-}
+      - AIRFLOW__SMTP__SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - AIRFLOW__SMTP__SMTP_MAIL_FROM=${SMTP_FROM:-noreply@conformai.com}
+      - AIRFLOW__SMTP__SMTP_STARTTLS=True
+      - AIRFLOW__SMTP__SMTP_SSL=False
+      # API Keys and Application Config
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - QDRANT_COLLECTION_NAME=${QDRANT_COLLECTION_NAME:-eu_legal_documents}
+      - ALERT_EMAIL=${ALERT_EMAIL:-admin@conformai.com}
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/plugins:/opt/airflow/plugins
@@ -159,12 +189,29 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      qdrant:
+        condition: service_healthy
     environment:
       - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER:-conformai}:${POSTGRES_PASSWORD:-conformai_password}@postgres:5432/${POSTGRES_DB:-conformai}
       - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
       - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://${POSTGRES_USER:-conformai}:${POSTGRES_PASSWORD:-conformai_password}@postgres:5432/${POSTGRES_DB:-conformai}
       - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY:-FB0o_zt4e3Ziq3LdUUO7F2Z95cvFFx16hU8jTeR1ASM=}
+      # SMTP Configuration for Email Notifications
+      - AIRFLOW__SMTP__SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - AIRFLOW__SMTP__SMTP_PORT=${SMTP_PORT:-587}
+      - AIRFLOW__SMTP__SMTP_USER=${SMTP_USER:-}
+      - AIRFLOW__SMTP__SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - AIRFLOW__SMTP__SMTP_MAIL_FROM=${SMTP_FROM:-noreply@conformai.com}
+      - AIRFLOW__SMTP__SMTP_STARTTLS=True
+      - AIRFLOW__SMTP__SMTP_SSL=False
+      # API Keys and Application Config
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - QDRANT_COLLECTION_NAME=${QDRANT_COLLECTION_NAME:-eu_legal_documents}
+      - ALERT_EMAIL=${ALERT_EMAIL:-admin@conformai.com}
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/plugins:/opt/airflow/plugins

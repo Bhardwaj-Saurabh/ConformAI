@@ -85,14 +85,38 @@ class EURLexClient:
         """
         logger.debug(f"Executing SPARQL query: {query[:200]}...")
 
-        response = self.client.post(
-            self.sparql_endpoint,
-            headers={"Accept": "application/sparql-results+json"},
-            data={"query": query},
-        )
-        response.raise_for_status()
+        start_time = time.time()
+        try:
+            response = self.client.post(
+                self.sparql_endpoint,
+                headers={"Accept": "application/sparql-results+json"},
+                data={"query": query},
+            )
+            response.raise_for_status()
 
-        return response.json()
+            duration_ms = (time.time() - start_time) * 1000
+            logger.debug(
+                "SPARQL query completed",
+                extra={
+                    "endpoint": self.sparql_endpoint,
+                    "status_code": response.status_code,
+                    "duration_ms": duration_ms,
+                    "response_size_bytes": len(response.content),
+                },
+            )
+
+            return response.json()
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
+            logger.error(
+                f"SPARQL query failed after {duration_ms:.0f}ms: {str(e)}",
+                extra={
+                    "endpoint": self.sparql_endpoint,
+                    "duration_ms": duration_ms,
+                    "error": str(e),
+                },
+            )
+            raise
 
     def search_recent_documents(
         self,
@@ -285,18 +309,47 @@ class EURLexClient:
 
         logger.info(f"Downloading {celex} in {format} format...")
 
+        start_time = time.time()
         try:
             response = self.client.get(url, params=params)
             response.raise_for_status()
 
+            download_duration = (time.time() - start_time) * 1000
+            content_size = len(response.content)
+            throughput_kbps = (content_size / 1024) / (download_duration / 1000) if download_duration > 0 else 0
+
+            logger.info(
+                f"Successfully downloaded {celex} ({content_size:,} bytes, {download_duration:.0f}ms, {throughput_kbps:.1f} KB/s)"
+            )
+
+            logger.debug(
+                "Document download completed",
+                extra={
+                    "celex": celex,
+                    "format": format,
+                    "content_size_bytes": content_size,
+                    "duration_ms": download_duration,
+                    "throughput_kbps": throughput_kbps,
+                    "status_code": response.status_code,
+                },
+            )
+
             # Add a small delay to be polite to EUR-Lex servers
             time.sleep(0.5)
 
-            logger.info(f"Successfully downloaded {celex} ({len(response.content)} bytes)")
             return response.content
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"Failed to download {celex}: HTTP {e.response.status_code}")
+            download_duration = (time.time() - start_time) * 1000
+            logger.error(
+                f"Failed to download {celex}: HTTP {e.response.status_code} after {download_duration:.0f}ms",
+                extra={
+                    "celex": celex,
+                    "format": format,
+                    "status_code": e.response.status_code,
+                    "duration_ms": download_duration,
+                },
+            )
             raise
 
     def download_document_to_file(

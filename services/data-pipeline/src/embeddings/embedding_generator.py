@@ -121,21 +121,45 @@ class EmbeddingGenerator:
 
         for batch_idx, batch_texts in iterator:
             try:
+                batch_start = time.time()
+
                 # Call OpenAI API
                 response = self.client.embeddings.create(
                     model=self.model_name, input=batch_texts, dimensions=self.dimensions
                 )
 
+                batch_duration = (time.time() - batch_start) * 1000
+
                 # Extract embeddings
                 batch_embeddings = [item.embedding for item in response.data]
                 all_embeddings.extend(batch_embeddings)
+
+                # Log batch performance
+                logger.debug(
+                    f"Batch {batch_idx + 1}/{len(batches)} completed",
+                    extra={
+                        "batch_index": batch_idx,
+                        "batch_size": len(batch_texts),
+                        "duration_ms": batch_duration,
+                        "embeddings_per_second": len(batch_texts) / (batch_duration / 1000) if batch_duration > 0 else 0,
+                        "model": self.model_name,
+                    },
+                )
 
                 # Small delay to avoid rate limits
                 if batch_idx < len(batches) - 1:
                     time.sleep(0.1)
 
             except Exception as e:
-                logger.error(f"Failed to generate embeddings for batch {batch_idx}: {str(e)}")
+                logger.error(
+                    f"Failed to generate embeddings for batch {batch_idx}: {str(e)}",
+                    extra={
+                        "batch_index": batch_idx,
+                        "batch_size": len(batch_texts),
+                        "model": self.model_name,
+                        "error": str(e),
+                    },
+                )
                 raise
 
         # Attach embeddings to chunks

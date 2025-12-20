@@ -252,9 +252,24 @@ kubectl scale deployment rag-service --replicas=3 -n conformai
 
 ## Documentation
 
+### Architecture & Planning
 - [Technical Implementation Plan](TECHNICAL_IMPLEMENTATION_PLAN.md)
-- [Project Roadmap](claude.md)
-- [API Documentation](http://localhost:8000/docs) (when running)
+- [Project Roadmap](CLAUDE.md)
+- [Production Readiness Checklist](PRODUCTION_READINESS.md)
+
+### Airflow & Data Pipeline
+- [Airflow Quick Start Guide](AIRFLOW_QUICKSTART.md) - Get started in 5 minutes
+- [Airflow Setup & Documentation](airflow/README.md) - Comprehensive guide
+- [Airflow Implementation Summary](AIRFLOW_IMPLEMENTATION_SUMMARY.md)
+- [Data Pipeline Logging Summary](DATA_PIPELINE_LOGGING_SUMMARY.md)
+
+### Logging & Observability
+- [Complete Logging Guide](LOGGING_GUIDE.md) - RAG + Data Pipeline
+- [RAG Logging Implementation](LOGGING_IMPLEMENTATION_SUMMARY.md)
+
+### API Documentation
+- [Interactive API Docs](http://localhost:8000/docs) (when running)
+- [ReDoc API Docs](http://localhost:8000/redoc) (when running)
 
 ## License
 

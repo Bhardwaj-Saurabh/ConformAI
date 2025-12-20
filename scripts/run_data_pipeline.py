@@ -435,17 +435,91 @@ def main() -> int:
     indexer.create_collection(recreate=args.recreate_collection)
 
     total_indexed = 0
-    for embedded_path in embedded_docs:
+    index_errors = 0
+
+    for idx, embedded_path in enumerate(embedded_docs, 1):
+        celex = embedded_path.stem.replace("_embedded", "")
+        index_stage.log_info(f"Indexing {idx}/{len(embedded_docs)}: {celex}")
+
         try:
+            index_start = time.time()
+
             with embedded_path.open("rb") as handle:
                 embedded_chunks = pickle.load(handle)
+
             indexed = indexer.index_chunks(embedded_chunks, batch_size=100, show_progress=True)
+            index_duration = (time.time() - index_start) * 1000
+            throughput = indexed / (index_duration / 1000) if index_duration > 0 else 0
+
+            index_stage.log_info(
+                f"✓ Indexed {celex}: {indexed} points ({index_duration:.0f}ms, {throughput:.1f} pts/sec)"
+            )
+
             total_indexed += indexed
         except Exception as exc:
             logger.error(f"Failed to index {embedded_path.name}: {exc}")
+            index_errors += 1
+
+    index_stage.log_complete(
+        documents_indexed=len(embedded_docs) - index_errors,
+        index_errors=index_errors,
+        total_points_indexed=total_indexed,
+    )
 
     indexer.close()
-    logger.info(f"Pipeline complete. Indexed {total_indexed} chunks.")
+
+    # Pipeline completion
+    pipeline_duration = (time.time() - pipeline_start_time) * 1000
+
+    logger.info("╔═══════════════════════════════════════════════════════════════════╗")
+    logger.info("║            DATA PIPELINE COMPLETED SUCCESSFULLY                   ║")
+    logger.info("╚═══════════════════════════════════════════════════════════════════╝")
+
+    logger.log_performance(
+        operation="data_pipeline_execution",
+        duration_ms=pipeline_duration,
+        documents_processed=len(celex_ids),
+        documents_downloaded=len(downloaded_paths),
+        documents_parsed=len(parsed_docs),
+        documents_chunked=len(chunked_docs),
+        documents_embedded=len(embedded_docs),
+        total_chunks_created=total_chunks_created,
+        total_embeddings_generated=total_embeddings_generated,
+        total_points_indexed=total_indexed,
+    )
+
+    logger.info(
+        "Pipeline summary",
+        extra={
+            "total_duration_ms": pipeline_duration,
+            "total_duration_sec": pipeline_duration / 1000,
+            "documents_processed": len(celex_ids),
+            "download_errors": download_errors,
+            "parse_errors": parse_errors,
+            "chunk_errors": chunk_errors,
+            "embed_errors": embed_errors,
+            "index_errors": index_errors,
+            "success_rate": (len(embedded_docs) - index_errors) / len(celex_ids) if celex_ids else 0,
+            "total_chapters": total_chapters,
+            "total_articles": total_articles,
+            "total_chunks_created": total_chunks_created,
+            "total_chunks_filtered": total_chunks_filtered,
+            "total_embeddings_generated": total_embeddings_generated,
+            "total_embeddings_skipped": total_embeddings_skipped,
+            "total_points_indexed": total_indexed,
+        },
+    )
+
+    logger.log_audit(
+        action="data_pipeline_completed",
+        resource="eu_legal_documents",
+        result="success",
+        processing_time_ms=pipeline_duration,
+        documents_indexed=len(embedded_docs) - index_errors,
+        total_points=total_indexed,
+    )
+
+    logger.info(f"✓ Pipeline complete. Indexed {total_indexed} chunks in {pipeline_duration/1000:.1f}s")
     return 0
 
 

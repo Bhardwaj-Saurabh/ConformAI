@@ -196,15 +196,40 @@ class QdrantIndexer:
 
         for i in iterator:
             batch = points[i : i + batch_size]
+            batch_idx = i // batch_size
 
             try:
+                batch_start = time.time()
+
                 self.client.upsert(
                     collection_name=self.collection_name,
                     points=batch,
                 )
+
+                batch_duration = (time.time() - batch_start) * 1000
                 indexed_count += len(batch)
+
+                logger.debug(
+                    f"Indexed batch {batch_idx + 1}",
+                    extra={
+                        "batch_index": batch_idx,
+                        "batch_size": len(batch),
+                        "duration_ms": batch_duration,
+                        "points_per_second": len(batch) / (batch_duration / 1000) if batch_duration > 0 else 0,
+                        "collection": self.collection_name,
+                    },
+                )
+
             except Exception as e:
-                logger.error(f"Failed to index batch {i//batch_size}: {str(e)}")
+                logger.error(
+                    f"Failed to index batch {batch_idx}: {str(e)}",
+                    extra={
+                        "batch_index": batch_idx,
+                        "batch_size": len(batch),
+                        "collection": self.collection_name,
+                        "error": str(e),
+                    },
+                )
                 raise
 
         elapsed = time.time() - start_time
