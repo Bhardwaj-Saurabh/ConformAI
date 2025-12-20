@@ -83,6 +83,11 @@ dependencies = [
     # Evaluation
     "ragas>=0.2.0",
     "datasets>=3.0.0",
+
+    # Dashboard & Visualization
+    "streamlit>=1.28.0",
+    "pandas>=2.0.0",
+    "plotly>=5.18.0",
 ]
 
 [project.optional-dependencies]

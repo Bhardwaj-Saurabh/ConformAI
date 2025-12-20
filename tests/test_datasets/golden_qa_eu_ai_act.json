@@ -1,0 +1,212 @@
+[
+  {
+    "id": "eu_ai_act_001",
+    "query": "What are the prohibited AI practices under the EU AI Act?",
+    "ground_truth_answer": "The EU AI Act prohibits several AI practices including: (1) AI systems that deploy subliminal techniques to materially distort behavior causing harm, (2) AI systems that exploit vulnerabilities of specific groups, (3) Social scoring systems by public authorities, (4) Real-time remote biometric identification in publicly accessible spaces for law enforcement (with limited exceptions).",
+    "relevant_chunk_ids": [
+      "eu_ai_act_article_5",
+      "eu_ai_act_article_5_1a",
+      "eu_ai_act_article_5_1b",
+      "eu_ai_act_article_5_1c",
+      "eu_ai_act_article_5_1d"
+    ],
+    "expected_aspects": [
+      "subliminal techniques",
+      "exploitation of vulnerabilities",
+      "social scoring",
+      "biometric identification restrictions"
+    ],
+    "difficulty": "medium",
+    "category": "prohibitions"
+  },
+  {
+    "id": "eu_ai_act_002",
+    "query": "What documentation requirements apply to high-risk AI systems?",
+    "ground_truth_answer": "High-risk AI systems must maintain technical documentation including: (1) A general description of the AI system, (2) Detailed description of system elements and development process, (3) Information about monitoring, functioning and control, (4) Description of risk management system, (5) Description of changes made through lifecycle, (6) List of harmonized standards applied, (7) Copy of EU declaration of conformity, (8) Detailed description of the system capabilities and limitations.",
+    "relevant_chunk_ids": [
+      "eu_ai_act_article_11",
+      "eu_ai_act_annex_iv",
+      "eu_ai_act_article_11_1",
+      "eu_ai_act_article_11_2"
+    ],
+    "expected_aspects": [
+      "technical documentation",
+      "system description",
+      "risk management documentation",
+      "conformity documentation",
+      "lifecycle documentation"
+    ],
+    "difficulty": "hard",
+    "category": "obligations"
+  },
+  {
+    "id": "eu_ai_act_003",
+    "query": "Is an AI system used for recruitment considered high-risk?",
+    "ground_truth_answer": "Yes, AI systems intended to be used for recruitment or selection of natural persons, notably for advertising vacancies, screening or filtering applications, evaluating candidates in the course of interviews or tests, are classified as high-risk AI systems under Annex III of the EU AI Act.",
+    "relevant_chunk_ids": [
+      "eu_ai_act_annex_iii",
+      "eu_ai_act_annex_iii_4",
+      "eu_ai_act_article_6"
+    ],
+    "expected_aspects": [
+      "high-risk classification",
+      "recruitment use case",
+      "Annex III reference"
+    ],
+    "difficulty": "easy",
+    "category": "risk_classification"
+  },
+  {
+    "id": "gdpr_001",
+    "query": "What are the lawful bases for processing personal data under GDPR?",
+    "ground_truth_answer": "Under GDPR Article 6, personal data processing is lawful only if at least one of these applies: (a) Consent of the data subject, (b) Processing necessary for contract performance, (c) Compliance with legal obligation, (d) Protection of vital interests, (e) Performance of task in public interest or official authority, (f) Legitimate interests pursued by controller or third party.",
+    "relevant_chunk_ids": [
+      "gdpr_article_6",
+      "gdpr_article_6_1",
+      "gdpr_article_6_1a",
+      "gdpr_article_6_1b",
+      "gdpr_article_6_1c",
+      "gdpr_article_6_1d",
+      "gdpr_article_6_1e",
+      "gdpr_article_6_1f"
+    ],
+    "expected_aspects": [
+      "consent",
+      "contractual necessity",
+      "legal obligation",
+      "vital interests",
+      "public interest",
+      "legitimate interests"
+    ],
+    "difficulty": "medium",
+    "category": "legal_basis"
+  },
+  {
+    "id": "eu_ai_act_004",
+    "query": "What transparency obligations apply to AI systems that interact with humans?",
+    "ground_truth_answer": "AI systems intended to interact with natural persons must be designed and developed in such a way that natural persons are informed that they are interacting with an AI system, unless this is obvious from the circumstances and context of use. This applies to chatbots, virtual assistants, and similar systems.",
+    "relevant_chunk_ids": [
+      "eu_ai_act_article_52",
+      "eu_ai_act_article_52_1"
+    ],
+    "expected_aspects": [
+      "transparency requirement",
+      "user notification",
+      "human interaction"
+    ],
+    "difficulty": "easy",
+    "category": "transparency"
+  },
+  {
+    "id": "eu_ai_act_005",
+    "query": "What are the obligations for providers of high-risk AI systems?",
+    "ground_truth_answer": "Providers of high-risk AI systems must: (1) Establish and implement a risk management system, (2) Ensure appropriate data governance and management practices, (3) Prepare technical documentation, (4) Implement logging capabilities, (5) Ensure appropriate human oversight, (6) Ensure accuracy, robustness and cybersecurity, (7) Establish quality management system, (8) Draw up EU declaration of conformity, (9) Affix CE marking, (10) Register system in EU database.",
+    "relevant_chunk_ids": [
+      "eu_ai_act_article_16",
+      "eu_ai_act_article_9",
+      "eu_ai_act_article_10",
+      "eu_ai_act_article_11",
+      "eu_ai_act_article_12",
+      "eu_ai_act_article_13",
+      "eu_ai_act_article_14",
+      "eu_ai_act_article_15",
+      "eu_ai_act_article_17"
+    ],
+    "expected_aspects": [
+      "risk management",
+      "data governance",
+      "documentation",
+      "logging",
+      "human oversight",
+      "accuracy and robustness",
+      "quality management",
+      "conformity assessment",
+      "CE marking",
+      "registration"
+    ],
+    "difficulty": "hard",
+    "category": "obligations"
+  },
+  {
+    "id": "gdpr_ai_001",
+    "query": "How does GDPR apply to training AI models on personal data?",
+    "ground_truth_answer": "Training AI models on personal data is considered processing under GDPR and requires a lawful basis (typically consent or legitimate interest). Organizations must: (1) Have a lawful basis for processing, (2) Ensure data minimization, (3) Implement appropriate technical and organizational measures, (4) Conduct Data Protection Impact Assessments for high-risk processing, (5) Honor data subject rights including right to erasure and right to object, (6) Ensure transparency about data use.",
+    "relevant_chunk_ids": [
+      "gdpr_article_6",
+      "gdpr_article_5",
+      "gdpr_article_35",
+      "gdpr_article_25",
+      "gdpr_article_17",
+      "gdpr_article_21"
+    ],
+    "expected_aspects": [
+      "lawful basis requirement",
+      "data minimization",
+      "security measures",
+      "DPIA requirement",
+      "data subject rights",
+      "transparency"
+    ],
+    "difficulty": "hard",
+    "category": "compliance_intersection"
+  },
+  {
+    "id": "eu_ai_act_006",
+    "query": "What is the definition of an AI system under the EU AI Act?",
+    "ground_truth_answer": "An AI system is defined as a machine-based system designed to operate with varying levels of autonomy and that may exhibit adaptiveness after deployment and that, for explicit or implicit objectives, infers, from the input it receives, how to generate outputs such as predictions, content, recommendations, or decisions that can influence physical or virtual environments.",
+    "relevant_chunk_ids": [
+      "eu_ai_act_article_3",
+      "eu_ai_act_article_3_1"
+    ],
+    "expected_aspects": [
+      "machine-based system",
+      "autonomy",
+      "adaptiveness",
+      "inference capability",
+      "output generation"
+    ],
+    "difficulty": "medium",
+    "category": "definitions"
+  },
+  {
+    "id": "eu_ai_act_007",
+    "query": "Are there exceptions to the prohibition on real-time biometric identification?",
+    "ground_truth_answer": "Yes, real-time remote biometric identification in publicly accessible spaces is permitted in specific cases with prior authorization: (a) targeted search for victims of crime, (b) prevention of specific, substantial and imminent threat to life or physical safety, (c) detection, localization, identification or prosecution of perpetrators or suspects of serious criminal offenses. These exceptions require prior judicial or independent administrative authorization except in duly justified urgent situations.",
+    "relevant_chunk_ids": [
+      "eu_ai_act_article_5",
+      "eu_ai_act_article_5_1h",
+      "eu_ai_act_article_5_2"
+    ],
+    "expected_aspects": [
+      "victim search exception",
+      "imminent threat prevention",
+      "serious crime detection",
+      "authorization requirement",
+      "urgent situation provision"
+    ],
+    "difficulty": "hard",
+    "category": "prohibitions_exceptions"
+  },
+  {
+    "id": "eu_ai_act_008",
+    "query": "What human oversight requirements exist for high-risk AI systems?",
+    "ground_truth_answer": "High-risk AI systems must be designed and developed with appropriate human oversight measures including: (1) Understanding of system capabilities and limitations, (2) Ability to remain aware of automation bias, (3) Ability to correctly interpret system output, (4) Ability to decide not to use the system or disregard, override or reverse its output, (5) Ability to intervene or interrupt the system through a stop button or similar procedure.",
+    "relevant_chunk_ids": [
+      "eu_ai_act_article_14",
+      "eu_ai_act_article_14_1",
+      "eu_ai_act_article_14_2",
+      "eu_ai_act_article_14_3",
+      "eu_ai_act_article_14_4"
+    ],
+    "expected_aspects": [
+      "understanding requirements",
+      "automation bias awareness",
+      "output interpretation",
+      "decision override capability",
+      "intervention capability",
+      "stop functionality"
+    ],
+    "difficulty": "medium",
+    "category": "human_oversight"
+  }
+]
