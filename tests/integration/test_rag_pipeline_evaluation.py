@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import List
 
 from tests.evaluation.pipeline_evaluator import PipelineEvaluator, TestCase, PipelineOutput
-from services.rag_service.src.graph.graph import run_rag_pipeline
+from graph.graph import run_rag_pipeline
 from shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
