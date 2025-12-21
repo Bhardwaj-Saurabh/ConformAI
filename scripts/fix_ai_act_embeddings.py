@@ -23,6 +23,7 @@ sys.path.insert(0, str(retrieval_service_root))
 
 from embeddings import EmbeddingGenerator
 from indexing import QdrantIndexer
+
 from shared.config import get_settings
 from shared.utils import get_logger
 

@@ -7,8 +7,9 @@ Includes LangGraph node tracing, LLM call tracking, and performance metrics.
 
 import functools
 import time
+from collections.abc import Callable
 from contextlib import contextmanager
-from typing import Any, Callable, Optional
+from typing import Any
 
 from shared.config import get_settings
 from shared.utils import get_logger
@@ -58,7 +59,7 @@ def get_opik_client():
 
 
 @contextmanager
-def trace_context(name: str, tags: Optional[list[str]] = None, metadata: Optional[dict] = None):
+def trace_context(name: str, tags: list[str] | None = None, metadata: dict | None = None):
     """
     Context manager for creating a trace span.
 
@@ -94,7 +95,7 @@ def trace_context(name: str, tags: Optional[list[str]] = None, metadata: Optiona
 def track_operation(
     operation_name: str,
     operation_type: str = "general",
-    metadata: Optional[dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ):
     """
     Decorator to track function execution with Opik.
@@ -283,7 +284,7 @@ def track_embedding_call(model_name: str = "text-embedding-3-large"):
     return decorator
 
 
-def log_metric(metric_name: str, value: float, tags: Optional[dict[str, str]] = None):
+def log_metric(metric_name: str, value: float, tags: dict[str, str] | None = None):
     """
     Log a custom metric to Opik.
 
@@ -307,7 +308,7 @@ def log_metric(metric_name: str, value: float, tags: Optional[dict[str, str]] = 
         logger.warning(f"Failed to log metric to Opik: {str(e)}")
 
 
-def log_event(event_name: str, properties: Optional[dict[str, Any]] = None):
+def log_event(event_name: str, properties: dict[str, Any] | None = None):
     """
     Log a custom event to Opik.
 

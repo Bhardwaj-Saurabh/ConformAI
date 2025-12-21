@@ -17,9 +17,9 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from tests.evaluation.pipeline_evaluator import PipelineEvaluator, TestCase, PipelineOutput
-    from tests.evaluation.report_generator import EvaluationReportGenerator
     from tests.evaluation.base import MetricType
+    from tests.evaluation.pipeline_evaluator import PipelineEvaluator, PipelineOutput, TestCase
+    from tests.evaluation.report_generator import EvaluationReportGenerator
 except ImportError as e:
     st.error(f"Import error: {e}")
     st.stop()
@@ -173,7 +173,7 @@ with st.sidebar:
 
                 if load_report:
                     report_path = reports_dir / f"{selected_file}.json"
-                    with open(report_path, "r") as f:
+                    with open(report_path) as f:
                         st.session_state.selected_report = json.load(f)
                     st.success(f"Loaded report: {selected_file}")
             else:
@@ -199,7 +199,7 @@ if eval_mode == "Run New Evaluation" and run_evaluation:
         st.error(f"Test dataset not found: {dataset_path}")
         st.stop()
 
-    with open(dataset_path, "r") as f:
+    with open(dataset_path) as f:
         dataset = json.load(f)
 
     # Limit test cases

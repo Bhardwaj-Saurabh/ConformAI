@@ -1,13 +1,13 @@
 """LLM client factory for Anthropic and OpenAI models."""
 
-from functools import lru_cache
 import asyncio
 import time
+from functools import lru_cache
 from typing import Literal
 
 from shared.config.settings import get_settings
 from shared.utils.logger import get_logger
-from shared.utils.opik_tracer import trace_context, log_metric
+from shared.utils.opik_tracer import log_metric, trace_context
 
 settings = get_settings()
 logger = get_logger(__name__)
@@ -221,7 +221,7 @@ async def invoke_llm(llm, input_data):
 
                 # Log fallback success
                 logger.warning(
-                    f"LLM call succeeded with sync fallback after async failure",
+                    "LLM call succeeded with sync fallback after async failure",
                     extra={
                         "llm_provider": provider,
                         "llm_model": model_name,

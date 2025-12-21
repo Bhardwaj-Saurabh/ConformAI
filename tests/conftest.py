@@ -9,8 +9,7 @@ import os
 import sys
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Generator
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from qdrant_client import QdrantClient
@@ -33,7 +32,6 @@ from shared.models import (
     RegulationType,
     RiskCategory,
 )
-from shared.utils.logger import get_logger
 
 # ============================================================================
 # Pytest Configuration
@@ -42,7 +40,7 @@ from shared.utils.logger import get_logger
 def pytest_configure(config):
     """Configure pytest."""
     # Set test environment
-    os.environ["ENVIRONMENT"] = "test"
+    os.environ["ENVIRONMENT"] = "development"
     os.environ["LOG_LEVEL"] = "DEBUG"
 
     # Mock API keys for tests that don't actually call APIs

@@ -13,7 +13,6 @@ Supports:
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from bs4 import BeautifulSoup, Tag
 from lxml import etree

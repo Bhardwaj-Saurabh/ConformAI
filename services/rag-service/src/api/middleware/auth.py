@@ -7,12 +7,10 @@ Provides production-ready security through:
 - Request tracking and audit logging
 """
 
-from datetime import datetime, timedelta
-from typing import Optional
 
+import redis.asyncio as redis
 from fastapi import Header, HTTPException, Request, status
 from fastapi.security import APIKeyHeader
-import redis.asyncio as redis
 
 from shared.config.settings import get_settings
 from shared.utils.logger import get_logger
@@ -48,7 +46,7 @@ class RateLimiter:
         self.redis_url = redis_url or settings.redis_url
         self.rpm = requests_per_minute
         self.rph = requests_per_hour
-        self._redis_client: Optional[redis.Redis] = None
+        self._redis_client: redis.Redis | None = None
 
     async def get_redis_client(self) -> redis.Redis:
         """Get or create Redis client."""
@@ -160,7 +158,7 @@ rate_limiter = RateLimiter(
 
 async def verify_api_key_and_rate_limit(
     request: Request,
-    x_api_key: Optional[str] = Header(None),
+    x_api_key: str | None = Header(None),
 ) -> str:
     """
     Verify API key and check rate limits.
@@ -238,7 +236,7 @@ async def verify_api_key_and_rate_limit(
 
         if not allowed:
             logger.warning(
-                f"Rate limit exceeded for API key",
+                "Rate limit exceeded for API key",
                 extra={
                     "api_key_prefix": x_api_key[:8],
                     "limit_info": limit_info,

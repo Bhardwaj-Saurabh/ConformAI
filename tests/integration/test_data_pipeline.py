@@ -4,10 +4,10 @@ Integration Tests for Data Pipeline
 Tests the complete data pipeline with real components but mocked external APIs.
 """
 
-import pytest
-from pathlib import Path
 from datetime import date
 from unittest.mock import Mock, patch
+
+import pytest
 
 pytestmark = pytest.mark.integration
 
@@ -216,8 +216,8 @@ class TestPipelineErrorHandling:
 
     def test_download_failure_recovery(self, mock_eurlex_response):
         """Test pipeline continues after download failure."""
-        from clients.eurlex_client import EURLexClient
         import httpx
+        from clients.eurlex_client import EURLexClient
 
         client = EURLexClient()
 

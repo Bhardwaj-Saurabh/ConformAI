@@ -3,22 +3,21 @@
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-
 from api.schemas import (
     ErrorResponse,
-    HealthResponse,
     QueryMetadata,
     QueryRequest,
     QueryResponse,
     ReasoningStep,
 )
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from graph.graph import run_rag_pipeline
+
 from shared.config.settings import get_settings
-from shared.utils.logger import get_logger, set_request_context, clear_request_context
-from shared.utils.opik_tracer import get_opik_client, log_metric, log_event
+from shared.utils.logger import clear_request_context, get_logger, set_request_context
+from shared.utils.opik_tracer import get_opik_client, log_event, log_metric
 
 # Import health check router
 try:
@@ -277,7 +276,7 @@ async def query_compliance(request: QueryRequest):
         set_request_context(conversation_id=request.conversation_id)
 
     logger.info(
-        f"Processing compliance query",
+        "Processing compliance query",
         extra={
             "query_length": len(request.query),
             "query_preview": request.query[:100],
@@ -401,7 +400,7 @@ async def query_compliance(request: QueryRequest):
         })
 
         logger.info(
-            f"✓ Query processed successfully",
+            "✓ Query processed successfully",
             extra={
                 "total_duration_ms": api_duration_ms,
                 "confidence_score": result.get("confidence_score", 0.0),

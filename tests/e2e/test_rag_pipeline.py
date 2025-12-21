@@ -4,8 +4,9 @@ End-to-End Tests for RAG Pipeline
 Tests the complete RAG workflow from query to answer generation.
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
 
 pytestmark = pytest.mark.e2e
 
@@ -205,8 +206,8 @@ class TestRAGPipelineWithRealQdrant:
         generate_chunks,
     ):
         """Test complete pipeline with real indexing and retrieval."""
-        from indexing.qdrant_indexer import QdrantIndexer
         from embeddings.embedding_generator import EmbeddingGenerator
+        from indexing.qdrant_indexer import QdrantIndexer
 
         # 1. Create and index chunks
         indexer = QdrantIndexer(

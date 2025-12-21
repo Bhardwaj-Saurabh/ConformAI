@@ -12,10 +12,10 @@ import asyncio
 from datetime import datetime
 from typing import Any
 
+import psutil
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse, PlainTextResponse
-from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTENT_TYPE_LATEST
-import psutil
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 
 from shared.config.settings import get_settings
 from shared.utils.logger import get_logger

@@ -1,9 +1,8 @@
 """FastAPI application for retrieval service."""
 
 import sys
-from pathlib import Path
-
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +25,7 @@ from api.schemas import (
     RetrievalResponse,
 )
 from retrieval.retriever import get_retrieval_service
+
 from shared.config.settings import get_settings
 from shared.utils.logger import get_logger
 
@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Embedding model: {settings.embedding_model}")
 
     # Initialize services (singleton pattern ensures single instance)
-    retriever = get_retrieval_service()
+    _ = get_retrieval_service()  # noqa: F841
 
     yield
 

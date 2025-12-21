@@ -11,7 +11,6 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from services.rag_service.src.graph.graph import run_rag_pipeline
 from services.rag_service.src.graph.state import create_initial_state
 
 
@@ -38,7 +37,7 @@ async def test_query(query: str, max_iterations: int = 5):
     result = await graph.ainvoke(initial_state)
 
     # Display results
-    print(f"📊 ANALYSIS")
+    print("📊 ANALYSIS")
     print(f"  Intent: {result.get('intent')}")
     print(f"  Complexity: {result.get('query_complexity')}")
     print(f"  AI Domain: {result.get('ai_domain')}")
@@ -62,12 +61,12 @@ async def test_query(query: str, max_iterations: int = 5):
 
     # Retrieval
     if result.get("retrieval_history"):
-        print(f"\n🔎 RETRIEVAL HISTORY")
+        print("\n🔎 RETRIEVAL HISTORY")
         for i, ret in enumerate(result["retrieval_history"]):
             print(f"  {i+1}. Retrieved {ret.get('count', 0)} chunks")
 
     # Answer
-    print(f"\n💡 ANSWER")
+    print("\n💡 ANSWER")
     if result.get("refusal_reason"):
         print(f"  ❌ Refused: {result['refusal_reason']}")
     elif result.get("final_answer"):
@@ -86,7 +85,7 @@ async def test_query(query: str, max_iterations: int = 5):
             print(f"  - Source {cit.source_id}: {cit.regulation}, {cit.article or 'N/A'}")
 
     # Metrics
-    print(f"\n📊 METRICS")
+    print("\n📊 METRICS")
     print(f"  Processing Time: {result.get('processing_time_ms', 0):.0f}ms")
     print(f"  Confidence Score: {result.get('confidence_score', 0):.2f}")
     print(f"  Iterations: {result.get('iteration_count', 0)}")

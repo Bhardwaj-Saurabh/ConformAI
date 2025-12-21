@@ -4,11 +4,12 @@ Unit Tests for EUR-Lex Client
 Tests EUR-Lex API client with mocked HTTP responses.
 """
 
-import pytest
 from datetime import date
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
+import pytest
 from clients.eurlex_client import EURLexClient
+
 from shared.models import RegulationType
 
 

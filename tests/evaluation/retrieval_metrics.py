@@ -1,7 +1,7 @@
 """Retrieval evaluation metrics (precision, recall, MRR, NDCG)."""
 
 import math
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from tests.evaluation.base import BaseEvaluator, EvaluationResult, MetricType
 
@@ -32,9 +32,9 @@ class RetrievalEvaluator(BaseEvaluator):
     async def evaluate(
         self,
         query: str,
-        prediction: List[str],  # Retrieved chunk IDs
-        ground_truth: List[str],  # Relevant chunk IDs
-        context: Optional[Dict[str, Any]] = None,
+        prediction: list[str],  # Retrieved chunk IDs
+        ground_truth: list[str],  # Relevant chunk IDs
+        context: dict[str, Any] | None = None,
     ) -> EvaluationResult:
         """Evaluate retrieval quality."""
         # Calculate all metrics
@@ -71,8 +71,8 @@ class RetrievalEvaluator(BaseEvaluator):
 
     @staticmethod
     def calculate_precision_at_k(
-        retrieved: List[str],
-        relevant: List[str],
+        retrieved: list[str],
+        relevant: list[str],
         k: int,
     ) -> float:
         """
@@ -91,8 +91,8 @@ class RetrievalEvaluator(BaseEvaluator):
 
     @staticmethod
     def calculate_recall_at_k(
-        retrieved: List[str],
-        relevant: List[str],
+        retrieved: list[str],
+        relevant: list[str],
         k: int,
     ) -> float:
         """
@@ -114,8 +114,8 @@ class RetrievalEvaluator(BaseEvaluator):
 
     @staticmethod
     def calculate_mrr(
-        retrieved: List[str],
-        relevant: List[str],
+        retrieved: list[str],
+        relevant: list[str],
     ) -> float:
         """
         Calculate Mean Reciprocal Rank.
@@ -135,10 +135,10 @@ class RetrievalEvaluator(BaseEvaluator):
 
     @staticmethod
     def calculate_ndcg_at_k(
-        retrieved: List[str],
-        relevant: List[str],
+        retrieved: list[str],
+        relevant: list[str],
         k: int,
-        relevance_scores: Optional[Dict[str, float]] = None,
+        relevance_scores: dict[str, float] | None = None,
     ) -> float:
         """
         Calculate Normalized Discounted Cumulative Gain@K.
@@ -159,7 +159,7 @@ class RetrievalEvaluator(BaseEvaluator):
 
         # Binary relevance if scores not provided
         if relevance_scores is None:
-            relevance_scores = {item: 1.0 for item in relevant}
+            relevance_scores = dict.fromkeys(relevant, 1.0)
 
         # Calculate DCG@K
         dcg = 0.0
@@ -182,8 +182,8 @@ class RetrievalEvaluator(BaseEvaluator):
 
     @staticmethod
     def calculate_hit_rate(
-        retrieved: List[str],
-        relevant: List[str],
+        retrieved: list[str],
+        relevant: list[str],
     ) -> float:
         """
         Calculate Hit Rate (binary).
@@ -198,10 +198,10 @@ class RetrievalEvaluator(BaseEvaluator):
 
     async def evaluate_batch(
         self,
-        queries: List[str],
-        predictions: List[List[str]],
-        ground_truths: List[List[str]],
-    ) -> Dict[str, float]:
+        queries: list[str],
+        predictions: list[list[str]],
+        ground_truths: list[list[str]],
+    ) -> dict[str, float]:
         """
         Evaluate retrieval quality across multiple queries.
 

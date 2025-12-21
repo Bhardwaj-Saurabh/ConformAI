@@ -10,7 +10,6 @@ This script:
 5. Runs basic health checks
 """
 
-import os
 import sys
 from pathlib import Path
 

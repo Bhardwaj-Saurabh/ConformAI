@@ -16,12 +16,10 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.operators.bash import BashOperator
-from airflow.sensors.filesystem import FileSensor
-from airflow.utils.task_group import TaskGroup
 from airflow.utils.trigger_rule import TriggerRule
+
+from airflow import DAG
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -69,8 +67,10 @@ def check_prerequisites(**context):
     - Minimum disk space
     """
     import shutil
-    from shared.config import get_settings
+
     from qdrant_client import QdrantClient
+
+    from shared.config import get_settings
 
     logger.info("Checking pipeline prerequisites...")
 
@@ -144,7 +144,9 @@ def discover_documents(**context):
         List of CELEX IDs to process
     """
     from datetime import date, timedelta
+
     from clients import EURLexClient
+
     from shared.config import get_settings
 
     logger.info("Discovering EU legal documents from EUR-Lex...")
@@ -182,8 +184,8 @@ def discover_documents(**context):
 
 def download_documents(**context):
     """Download documents from EUR-Lex."""
-    import pickle
     from clients import EURLexClient
+
     from shared.config import get_settings
 
     # Get CELEX IDs from previous task
@@ -247,8 +249,10 @@ def download_documents(**context):
 def parse_documents(**context):
     """Parse downloaded legal documents."""
     import pickle
-    from parsers import LegalDocumentParser
+
     from clients import EURLexClient
+    from parsers import LegalDocumentParser
+
     from shared.config import get_settings
 
     # Get downloaded paths from previous task
@@ -336,7 +340,9 @@ def parse_documents(**context):
 def chunk_documents(**context):
     """Chunk parsed documents."""
     import pickle
+
     from chunking import LegalChunker
+
     from shared.config import get_settings
 
     # Get parsed paths from previous task
@@ -420,7 +426,9 @@ def chunk_documents(**context):
 def generate_embeddings(**context):
     """Generate embeddings for chunks."""
     import pickle
+
     from embeddings import EmbeddingGenerator
+
     from shared.config import get_settings
 
     # Get chunked paths from previous task
@@ -493,6 +501,7 @@ def generate_embeddings(**context):
 def index_to_qdrant(**context):
     """Index embeddings to Qdrant vector database."""
     import pickle
+
     from indexing import QdrantIndexer
 
     # Get embedded paths from previous task

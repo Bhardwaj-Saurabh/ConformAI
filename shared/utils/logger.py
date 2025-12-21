@@ -3,18 +3,17 @@
 import json
 import logging
 import sys
-import time
 import traceback
 from contextvars import ContextVar
-from typing import Any, Optional
 from datetime import datetime
+from typing import Any
 
 from ..config import get_settings
 
 # Context variables for request tracking
-request_id_context: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
-conversation_id_context: ContextVar[Optional[str]] = ContextVar("conversation_id", default=None)
-user_id_context: ContextVar[Optional[str]] = ContextVar("user_id", default=None)
+request_id_context: ContextVar[str | None] = ContextVar("request_id", default=None)
+conversation_id_context: ContextVar[str | None] = ContextVar("conversation_id", default=None)
+user_id_context: ContextVar[str | None] = ContextVar("user_id", default=None)
 
 
 class StructuredFormatter(logging.Formatter):
@@ -291,9 +290,9 @@ def get_logger(name: str) -> ProductionLogger:
 
 
 def set_request_context(
-    request_id: Optional[str] = None,
-    conversation_id: Optional[str] = None,
-    user_id: Optional[str] = None
+    request_id: str | None = None,
+    conversation_id: str | None = None,
+    user_id: str | None = None
 ) -> None:
     """
     Set request context for logging.

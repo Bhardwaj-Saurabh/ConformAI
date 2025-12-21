@@ -12,20 +12,20 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-from typing import List
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from tests.evaluation.pipeline_evaluator import PipelineEvaluator, TestCase, PipelineOutput
-from tests.evaluation.report_generator import EvaluationReportGenerator
 from services.rag_service.src.graph.graph import run_rag_pipeline
+
 from shared.utils.logger import get_logger
+from tests.evaluation.pipeline_evaluator import PipelineEvaluator, PipelineOutput, TestCase
+from tests.evaluation.report_generator import EvaluationReportGenerator
 
 logger = get_logger(__name__)
 
 
-async def load_test_cases(dataset_name: str, num_cases: int = None) -> List[TestCase]:
+async def load_test_cases(dataset_name: str, num_cases: int = None) -> list[TestCase]:
     """
     Load test cases from dataset.
 
@@ -41,7 +41,7 @@ async def load_test_cases(dataset_name: str, num_cases: int = None) -> List[Test
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset not found: {dataset_path}")
 
-    with open(dataset_path, "r") as f:
+    with open(dataset_path) as f:
         data = json.load(f)
 
     # Limit number of cases if specified
@@ -64,7 +64,7 @@ async def load_test_cases(dataset_name: str, num_cases: int = None) -> List[Test
     return test_cases
 
 
-async def run_pipeline_for_test_cases(test_cases: List[TestCase]) -> List[PipelineOutput]:
+async def run_pipeline_for_test_cases(test_cases: list[TestCase]) -> list[PipelineOutput]:
     """
     Run RAG pipeline for all test cases.
 

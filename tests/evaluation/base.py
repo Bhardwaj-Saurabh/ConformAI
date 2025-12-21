@@ -3,8 +3,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
 from enum import Enum
+from typing import Any
 
 
 class MetricType(str, Enum):
@@ -28,11 +28,11 @@ class EvaluationResult:
     score: float  # 0.0 to 1.0
     passed: bool  # Whether it meets threshold
     threshold: float
-    details: Dict[str, Any] = field(default_factory=dict)
-    explanation: Optional[str] = None
+    details: dict[str, Any] = field(default_factory=dict)
+    explanation: str | None = None
     timestamp: datetime = field(default_factory=datetime.utcnow)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "metric_name": self.metric_name,
@@ -52,10 +52,10 @@ class EvaluationMetrics:
 
     test_case_id: str
     query: str
-    results: List[EvaluationResult] = field(default_factory=list)
+    results: list[EvaluationResult] = field(default_factory=list)
     overall_score: float = 0.0
     passed: bool = False
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.utcnow)
 
     def add_result(self, result: EvaluationResult) -> None:
@@ -77,11 +77,11 @@ class EvaluationMetrics:
         # All metrics must pass
         self.passed = all(r.passed for r in self.results)
 
-    def get_failed_metrics(self) -> List[EvaluationResult]:
+    def get_failed_metrics(self) -> list[EvaluationResult]:
         """Get all failed metrics."""
         return [r for r in self.results if not r.passed]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "test_case_id": self.test_case_id,
@@ -111,8 +111,8 @@ class BaseEvaluator(ABC):
         self,
         query: str,
         prediction: Any,
-        ground_truth: Optional[Any] = None,
-        context: Optional[Dict[str, Any]] = None,
+        ground_truth: Any | None = None,
+        context: dict[str, Any] | None = None,
     ) -> EvaluationResult:
         """
         Evaluate a prediction.
@@ -133,8 +133,8 @@ class BaseEvaluator(ABC):
         metric_name: str,
         metric_type: MetricType,
         score: float,
-        details: Optional[Dict[str, Any]] = None,
-        explanation: Optional[str] = None,
+        details: dict[str, Any] | None = None,
+        explanation: str | None = None,
     ) -> EvaluationResult:
         """Helper to create evaluation result."""
         return EvaluationResult(

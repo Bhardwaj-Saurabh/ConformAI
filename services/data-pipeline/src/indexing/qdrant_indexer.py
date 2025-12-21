@@ -13,7 +13,6 @@ Features:
 
 import hashlib
 import time
-import uuid
 from typing import Any
 
 from qdrant_client import QdrantClient

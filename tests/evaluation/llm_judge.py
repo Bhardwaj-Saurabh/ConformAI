@@ -1,13 +1,13 @@
 """LLM-as-a-Judge evaluator for subjective metrics."""
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
+from services.rag_service.src.llm.client import get_llm_client, invoke_llm
 
 from tests.evaluation.base import BaseEvaluator, EvaluationResult, MetricType
-from services.rag_service.src.llm.client import get_llm_client, invoke_llm
 
 
 class LLMJudgement(BaseModel):
@@ -15,9 +15,9 @@ class LLMJudgement(BaseModel):
 
     score: float  # 0.0 to 1.0
     reasoning: str
-    strengths: List[str]
-    weaknesses: List[str]
-    improvement_suggestions: List[str]
+    strengths: list[str]
+    weaknesses: list[str]
+    improvement_suggestions: list[str]
 
 
 class LLMJudge(BaseEvaluator):
@@ -48,7 +48,7 @@ class LLMJudge(BaseEvaluator):
         self,
         query: str,
         answer: str,
-        retrieved_chunks: List[str],
+        retrieved_chunks: list[str],
     ) -> EvaluationResult:
         """
         Evaluate if the answer is faithful to retrieved sources.
@@ -156,8 +156,8 @@ Provide ONLY the JSON output, no additional text."""
         self,
         query: str,
         answer: str,
-        ground_truth: Optional[str] = None,
-        retrieved_chunks: Optional[List[str]] = None,
+        ground_truth: str | None = None,
+        retrieved_chunks: list[str] | None = None,
     ) -> EvaluationResult:
         """
         Evaluate factual correctness of the answer.
@@ -225,7 +225,7 @@ Provide ONLY the JSON output, no additional text."""
         self,
         query: str,
         answer: str,
-        expected_aspects: Optional[List[str]] = None,
+        expected_aspects: list[str] | None = None,
     ) -> EvaluationResult:
         """
         Evaluate if the answer is complete.
@@ -285,8 +285,8 @@ Provide ONLY the JSON output, no additional text."""
     async def evaluate_citation_quality(
         self,
         answer: str,
-        citations: List[Dict[str, Any]],
-        retrieved_chunks: List[str],
+        citations: list[dict[str, Any]],
+        retrieved_chunks: list[str],
     ) -> EvaluationResult:
         """
         Evaluate quality of citations.
@@ -344,8 +344,8 @@ Provide ONLY the JSON output, no additional text."""
         self,
         query: str,
         prediction: Any,
-        ground_truth: Optional[Any] = None,
-        context: Optional[Dict[str, Any]] = None,
+        ground_truth: Any | None = None,
+        context: dict[str, Any] | None = None,
     ) -> EvaluationResult:
         """Run all LLM-based evaluations."""
         # This is a wrapper - use specific evaluate_* methods instead
@@ -369,7 +369,7 @@ Provide ONLY the JSON output, no additional text."""
                 improvement_suggestions=[],
             )
 
-    def _format_sources(self, chunks: List[str]) -> str:
+    def _format_sources(self, chunks: list[str]) -> str:
         """Format retrieved chunks for display."""
         formatted = []
         for i, chunk in enumerate(chunks, 1):

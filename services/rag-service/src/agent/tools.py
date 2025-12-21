@@ -1,17 +1,15 @@
 """Agent tools for ReAct loop - retrieval, generation, validation, etc."""
 
-import asyncio
-import httpx
 import time
 from typing import Any
 
+import httpx
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from shared.config.settings import get_settings
-from shared.models.legal_document import Chunk
 from shared.utils.logger import get_logger
-from shared.utils.opik_tracer import trace_context, log_metric
+from shared.utils.opik_tracer import log_metric, trace_context
 
 settings = get_settings()
 logger = get_logger(__name__)

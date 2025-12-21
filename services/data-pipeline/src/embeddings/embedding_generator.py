@@ -263,7 +263,7 @@ class EmbeddingGenerator:
             "api": "OpenAI",
         }
 
-        logger.info(f"Benchmark results:")
+        logger.info("Benchmark results:")
         logger.info(f"  Total time: {elapsed:.2f}s")
         logger.info(f"  Throughput: {results['samples_per_second']:.1f} samples/sec")
         logger.info(f"  Latency: {results['time_per_sample']*1000:.1f}ms per sample")

@@ -11,12 +11,13 @@ Triggered after EUR-Lex ingestion DAG completes.
 """
 
 import sys
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
-from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
+
+from airflow import DAG
 
 # Add services to path
 sys.path.insert(0, "/opt/airflow")
@@ -42,6 +43,7 @@ def parse_documents(**context):
     """
     from services.data_pipeline.src.clients import EURLexClient
     from services.data_pipeline.src.parsers import LegalDocumentParser
+
     from shared.utils import get_logger
 
     logger = get_logger(__name__)
@@ -126,6 +128,7 @@ def chunk_documents(**context):
     import pickle
 
     from services.data_pipeline.src.chunking import LegalChunker
+
     from shared.utils import get_logger
 
     logger = get_logger(__name__)
@@ -202,6 +205,7 @@ def generate_embeddings(**context):
     import pickle
 
     from services.data_pipeline.src.embeddings import EmbeddingGenerator
+
     from shared.config import get_settings
     from shared.utils import get_logger
 
@@ -284,6 +288,7 @@ def index_to_qdrant(**context):
     import pickle
 
     from services.data_pipeline.src.indexing import QdrantIndexer
+
     from shared.config import get_settings
     from shared.utils import get_logger
 
@@ -346,7 +351,7 @@ def index_to_qdrant(**context):
     # Get collection info
     try:
         collection_info = indexer.get_collection_info()
-        logger.info(f"Qdrant collection info:")
+        logger.info("Qdrant collection info:")
         for key, value in collection_info.items():
             logger.info(f"  {key}: {value}")
     except Exception as e:
@@ -365,6 +370,7 @@ def validate_indexing(**context):
     Performs test queries to verify retrieval works.
     """
     from services.data_pipeline.src.indexing import QdrantIndexer
+
     from shared.config import get_settings
     from shared.utils import get_logger
 

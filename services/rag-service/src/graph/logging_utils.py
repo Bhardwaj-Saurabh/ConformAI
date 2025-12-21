@@ -5,7 +5,8 @@ Provides consistent, extensive logging across all graph nodes with proper contex
 """
 
 import time
-from typing import Any, Dict
+from typing import Any
+
 from shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,7 +27,7 @@ class NodeLogger:
         self.node_type = node_type
         self.start_time = None
 
-    def log_entry(self, state: Dict[str, Any], **extra):
+    def log_entry(self, state: dict[str, Any], **extra):
         """
         Log node entry.
 
@@ -51,7 +52,7 @@ class NodeLogger:
             },
         )
 
-    def log_exit(self, state: Dict[str, Any], **extra):
+    def log_exit(self, state: dict[str, Any], **extra):
         """
         Log node exit with performance metrics.
 
@@ -74,7 +75,7 @@ class NodeLogger:
             **extra,
         )
 
-    def log_error(self, error: Exception, state: Dict[str, Any], **extra):
+    def log_error(self, error: Exception, state: dict[str, Any], **extra):
         """
         Log node error.
 
@@ -111,7 +112,7 @@ class NodeLogger:
         logger.warning(f"  [{self.node_name}] {message}", extra=extra)
 
 
-def log_state_transition(from_node: str, to_node: str, decision: str = None, state: Dict[str, Any] = None):
+def log_state_transition(from_node: str, to_node: str, decision: str = None, state: dict[str, Any] = None):
     """
     Log state transition between nodes.
 

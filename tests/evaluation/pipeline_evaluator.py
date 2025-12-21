@@ -1,14 +1,14 @@
 """End-to-end pipeline evaluator combining all metrics."""
 
 import asyncio
-from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
+from typing import Any
 
-from tests.evaluation.base import BaseEvaluator, EvaluationMetrics, MetricType
+from shared.utils.logger import get_logger
+from tests.evaluation.answer_metrics import AnswerEvaluator
+from tests.evaluation.base import EvaluationMetrics
 from tests.evaluation.llm_judge import LLMJudge
 from tests.evaluation.retrieval_metrics import RetrievalEvaluator
-from tests.evaluation.answer_metrics import AnswerEvaluator
-from shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -19,10 +19,10 @@ class TestCase:
 
     id: str
     query: str
-    ground_truth_answer: Optional[str] = None
-    relevant_chunk_ids: Optional[List[str]] = None
-    expected_aspects: Optional[List[str]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    ground_truth_answer: str | None = None
+    relevant_chunk_ids: list[str] | None = None
+    expected_aspects: list[str] | None = None
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
@@ -31,10 +31,10 @@ class PipelineOutput:
 
     query: str
     answer: str
-    retrieved_chunk_ids: List[str]
-    retrieved_chunks: List[str]
-    citations: List[Dict[str, Any]]
-    metadata: Dict[str, Any]
+    retrieved_chunk_ids: list[str]
+    retrieved_chunks: list[str]
+    citations: list[dict[str, Any]]
+    metadata: dict[str, Any]
 
 
 class PipelineEvaluator:
@@ -182,9 +182,9 @@ class PipelineEvaluator:
 
     async def evaluate_batch(
         self,
-        test_cases: List[TestCase],
-        pipeline_outputs: List[PipelineOutput],
-    ) -> Dict[str, Any]:
+        test_cases: list[TestCase],
+        pipeline_outputs: list[PipelineOutput],
+    ) -> dict[str, Any]:
         """
         Evaluate multiple test cases.
 
@@ -220,8 +220,8 @@ class PipelineEvaluator:
     async def _evaluate_retrieval(
         self,
         query: str,
-        retrieved: List[str],
-        ground_truth: List[str],
+        retrieved: list[str],
+        ground_truth: list[str],
     ):
         """Helper to evaluate retrieval."""
         return await self.retrieval_evaluator.evaluate(
@@ -232,9 +232,9 @@ class PipelineEvaluator:
 
     def _generate_report(
         self,
-        test_cases: List[TestCase],
-        all_metrics: List[EvaluationMetrics],
-    ) -> Dict[str, Any]:
+        test_cases: list[TestCase],
+        all_metrics: list[EvaluationMetrics],
+    ) -> dict[str, Any]:
         """Generate comprehensive evaluation report."""
         total_count = len(all_metrics)
         passed_count = sum(1 for m in all_metrics if m.passed)

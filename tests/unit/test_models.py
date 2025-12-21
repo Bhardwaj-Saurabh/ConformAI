@@ -174,7 +174,7 @@ class TestLegalDocument:
 
     def test_document_with_chapters(self, sample_regulation):
         """Test document with chapters."""
-        from shared.models import Chapter, Article
+        from shared.models import Article, Chapter
 
         article = Article(
             number="22",

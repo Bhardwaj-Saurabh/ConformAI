@@ -5,14 +5,13 @@ Run with: pytest tests/integration/test_rag_pipeline_evaluation.py -v
 """
 
 import json
-import pytest
-import asyncio
 from pathlib import Path
-from typing import List
 
-from tests.evaluation.pipeline_evaluator import PipelineEvaluator, TestCase, PipelineOutput
+import pytest
 from graph.graph import run_rag_pipeline
+
 from shared.utils.logger import get_logger
+from tests.evaluation.pipeline_evaluator import PipelineEvaluator, PipelineOutput, TestCase
 
 logger = get_logger(__name__)
 
@@ -21,11 +20,11 @@ class TestRAGPipelineEvaluation:
     """Integration tests with evaluation metrics."""
 
     @pytest.fixture
-    def test_cases(self) -> List[TestCase]:
+    def test_cases(self) -> list[TestCase]:
         """Load test cases from golden dataset."""
         dataset_path = Path(__file__).parent.parent / "test_datasets" / "golden_qa_eu_ai_act.json"
 
-        with open(dataset_path, "r") as f:
+        with open(dataset_path) as f:
             data = json.load(f)
 
         return [
@@ -136,14 +135,14 @@ class TestRAGPipelineEvaluation:
         assert "scores_by_metric_type" in report
 
         # Log report
-        logger.info(f"Batch evaluation results:")
+        logger.info("Batch evaluation results:")
         logger.info(f"  Total: {report['summary']['total_count']}")
         logger.info(f"  Passed: {report['summary']['passed_count']}")
         logger.info(f"  Failed: {report['summary']['failed_count']}")
         logger.info(f"  Pass rate: {report['summary']['pass_rate']:.1%}")
         logger.info(f"  Average score: {report['summary']['average_score']:.3f}")
 
-        logger.info(f"\nScores by metric type:")
+        logger.info("\nScores by metric type:")
         for metric_type, score in report["scores_by_metric_type"].items():
             logger.info(f"  {metric_type}: {score:.3f}")
 

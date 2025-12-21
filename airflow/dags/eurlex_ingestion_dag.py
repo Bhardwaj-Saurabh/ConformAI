@@ -6,9 +6,10 @@ Fetches latest EU regulations from EUR-Lex and triggers document processing.
 
 from datetime import datetime, timedelta
 
-from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
+
+from airflow import DAG
 
 # Default arguments
 default_args = {
@@ -33,6 +34,7 @@ def fetch_recent_documents(**context):
     - Subjects: AI, data protection
     """
     import httpx
+
     from shared.utils import get_logger
 
     logger = get_logger(__name__)
@@ -104,12 +106,12 @@ def detect_changes(**context):
 
     Compares fetched documents against database to identify changes.
     """
-    from datetime import date, datetime
+    from datetime import date
 
-    from shared.utils import get_logger
     from sqlalchemy import create_engine, text
 
     from shared.config.settings import get_settings
+    from shared.utils import get_logger
 
     logger = get_logger(__name__)
 
@@ -186,10 +188,10 @@ def download_documents(**context):
 
     Downloads from EUR-Lex formex endpoints.
     """
-    import os
     from pathlib import Path
 
     import httpx
+
     from shared.utils import get_logger
 
     logger = get_logger(__name__)

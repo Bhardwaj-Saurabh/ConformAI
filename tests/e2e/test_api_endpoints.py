@@ -4,9 +4,10 @@ End-to-End Tests for API Endpoints
 Tests API endpoints with FastAPI TestClient.
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import Mock, patch
 
 pytestmark = [pytest.mark.e2e, pytest.mark.api]
 

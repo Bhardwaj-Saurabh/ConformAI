@@ -12,12 +12,13 @@ Runs daily at 2 AM.
 """
 
 import pickle
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
-from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
+
+from airflow import DAG
 
 # Default arguments
 default_args = {
@@ -72,6 +73,7 @@ def download_documents(**context):
     sys.path.insert(0, '/opt/airflow/services/data-pipeline/src')
 
     from clients.eurlex_client import EURLexClient
+
     from shared.utils.logger import get_logger
 
     logger = get_logger(__name__)
@@ -138,6 +140,7 @@ def parse_documents(**context):
     sys.path.insert(0, '/opt/airflow/services/data-pipeline/src')
 
     from parsers.legal_parser import LegalDocumentParser
+
     from shared.utils.logger import get_logger
 
     logger = get_logger(__name__)
@@ -202,6 +205,7 @@ def chunk_documents(**context):
     sys.path.insert(0, '/opt/airflow/services/data-pipeline/src')
 
     from chunking.legal_chunker import LegalChunker
+
     from shared.config.settings import get_settings
     from shared.utils.logger import get_logger
 
@@ -278,6 +282,7 @@ def generate_embeddings(**context):
     sys.path.insert(0, '/opt/airflow/services/data-pipeline/src')
 
     from embeddings.embedding_generator import EmbeddingGenerator
+
     from shared.config.settings import get_settings
     from shared.utils.logger import get_logger
 
@@ -370,6 +375,7 @@ def index_to_qdrant(**context):
     sys.path.insert(0, '/opt/airflow/services/data-pipeline/src')
 
     from indexing.qdrant_indexer import QdrantIndexer
+
     from shared.config.settings import get_settings
     from shared.utils.logger import get_logger
 
@@ -445,6 +451,7 @@ def validate_pipeline(**context):
     sys.path.insert(0, '/opt/airflow/services/retrieval-service/src')
 
     from retrieval.qdrant_client import get_qdrant_store
+
     from shared.config.settings import get_settings
     from shared.utils.logger import get_logger
 

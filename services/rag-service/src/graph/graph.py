@@ -2,8 +2,6 @@
 
 from typing import Literal
 
-from langgraph.graph import END, StateGraph
-
 from graph.nodes.analysis import (
     analyze_query,
     decompose_query,
@@ -20,6 +18,8 @@ from graph.nodes.synthesis import (
 )
 from graph.nodes.validation import validate_grounding
 from graph.state import RAGState
+from langgraph.graph import END, StateGraph
+
 from shared.utils.logger import get_logger
 from shared.utils.opik_tracer import track_rag_pipeline
 
@@ -278,8 +278,9 @@ async def run_rag_pipeline(query: str, conversation_id: str | None = None) -> RA
         )
         print(result["final_answer"])
     """
-    from graph.state import create_initial_state
     import time
+
+    from graph.state import create_initial_state
 
     start_time = time.time()
 

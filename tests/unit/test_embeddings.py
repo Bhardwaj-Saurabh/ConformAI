@@ -4,9 +4,9 @@ Unit Tests for Embedding Generator
 Tests OpenAI embedding generation with mocked API calls.
 """
 
-import pytest
 from unittest.mock import Mock, patch
 
+import pytest
 from embeddings.embedding_generator import EmbeddingGenerator
 
 

@@ -1,7 +1,7 @@
 """Answer quality metrics (computed metrics, not LLM-based)."""
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from tests.evaluation.base import BaseEvaluator, EvaluationResult, MetricType
 
@@ -20,7 +20,7 @@ class AnswerEvaluator(BaseEvaluator):
     async def evaluate_citation_coverage(
         self,
         answer: str,
-        citations: List[Dict[str, Any]],
+        citations: list[dict[str, Any]],
     ) -> EvaluationResult:
         """
         Evaluate if answer has sufficient citations.
@@ -102,7 +102,7 @@ class AnswerEvaluator(BaseEvaluator):
     async def evaluate_hallucination(
         self,
         answer: str,
-        retrieved_chunks: List[str],
+        retrieved_chunks: list[str],
     ) -> EvaluationResult:
         """
         Detect potential hallucinations by checking if answer tokens
@@ -150,7 +150,7 @@ class AnswerEvaluator(BaseEvaluator):
     async def evaluate_answer_length(
         self,
         answer: str,
-        expected_length_range: Optional[tuple[int, int]] = None,
+        expected_length_range: tuple[int, int] | None = None,
     ) -> EvaluationResult:
         """
         Evaluate if answer length is appropriate.
@@ -192,21 +192,21 @@ class AnswerEvaluator(BaseEvaluator):
         self,
         query: str,
         prediction: Any,
-        ground_truth: Optional[Any] = None,
-        context: Optional[Dict[str, Any]] = None,
+        ground_truth: Any | None = None,
+        context: dict[str, Any] | None = None,
     ) -> EvaluationResult:
         """Run all computed evaluations."""
         raise NotImplementedError("Use specific evaluate_* methods")
 
     @staticmethod
-    def _split_into_sentences(text: str) -> List[str]:
+    def _split_into_sentences(text: str) -> list[str]:
         """Split text into sentences."""
         # Simple sentence splitting
         sentences = re.split(r'[.!?]+', text)
         return [s.strip() for s in sentences if s.strip()]
 
     @staticmethod
-    def _tokenize(text: str) -> List[str]:
+    def _tokenize(text: str) -> list[str]:
         """Simple tokenization."""
         # Remove punctuation and split
         text = re.sub(r'[^\w\s]', ' ', text)
@@ -225,7 +225,7 @@ class AnswerEvaluator(BaseEvaluator):
         return {t for t in tokens if t not in stopwords and len(t) > 2}
 
     @staticmethod
-    def _calculate_citation_distribution(answer: str, citations: List[Dict[str, Any]]) -> float:
+    def _calculate_citation_distribution(answer: str, citations: list[dict[str, Any]]) -> float:
         """
         Calculate how evenly citations are distributed throughout answer.
 

@@ -68,7 +68,7 @@ def test_legal_parser():
     print("=" * 80)
 
     from services.data_pipeline.src.parsers import LegalDocumentParser
-    from shared.models import Article, Chapter, LegalDocument, Regulation
+
 
     parser = LegalDocumentParser()
 
@@ -124,6 +124,7 @@ def test_legal_chunker():
     print("=" * 80)
 
     from services.data_pipeline.src.chunking import LegalChunker
+
     from shared.models import Article, Chapter, LegalDocument, Regulation
 
     chunker = LegalChunker(max_chunk_tokens=256, overlap_sentences=2)
@@ -156,7 +157,7 @@ def test_legal_chunker():
 
         if chunks:
             chunk = chunks[0]
-            print(f"   First chunk metadata:")
+            print("   First chunk metadata:")
             print(f"     - Article: {chunk.metadata.article_number}")
             print(f"     - Chunk: {chunk.metadata.chunk_index}/{chunk.metadata.total_chunks}")
             print(f"     - Domains: {chunk.metadata.domains}")
@@ -180,6 +181,7 @@ def test_embedding_generator():
     print("=" * 80)
 
     from services.data_pipeline.src.embeddings import EmbeddingGenerator
+
     from shared.models import Chunk, ChunkMetadata
 
     try:
@@ -246,6 +248,7 @@ def test_qdrant_indexer():
     print("=" * 80)
 
     from services.data_pipeline.src.indexing import QdrantIndexer
+
     from shared.models import Chunk, ChunkMetadata, RegulationType
 
     try:

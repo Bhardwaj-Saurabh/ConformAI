@@ -3,11 +3,12 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 import pandas as pd
 
-from tests.evaluation.base import EvaluationMetrics, MetricType
 from shared.utils.logger import get_logger
+from tests.evaluation.base import EvaluationMetrics, MetricType
 
 logger = get_logger(__name__)
 
@@ -30,10 +31,10 @@ class EvaluationReportGenerator:
 
     def generate_report(
         self,
-        all_metrics: List[EvaluationMetrics],
+        all_metrics: list[EvaluationMetrics],
         report_name: str = None,
         include_charts: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generate comprehensive evaluation report.
 
@@ -75,7 +76,7 @@ class EvaluationReportGenerator:
 
         return report
 
-    def _generate_summary(self, all_metrics: List[EvaluationMetrics]) -> Dict[str, Any]:
+    def _generate_summary(self, all_metrics: list[EvaluationMetrics]) -> dict[str, Any]:
         """Generate summary statistics."""
         total_count = len(all_metrics)
         passed_count = sum(1 for m in all_metrics if m.passed)
@@ -106,7 +107,7 @@ class EvaluationReportGenerator:
             "max_score": max(m.overall_score for m in all_metrics) if all_metrics else 0.0,
         }
 
-    def _analyze_metrics(self, all_metrics: List[EvaluationMetrics]) -> Dict[str, Any]:
+    def _analyze_metrics(self, all_metrics: list[EvaluationMetrics]) -> dict[str, Any]:
         """Analyze metrics by type."""
         metric_analysis = {}
 
@@ -136,7 +137,7 @@ class EvaluationReportGenerator:
 
         return metric_analysis
 
-    def _extract_failed_tests(self, all_metrics: List[EvaluationMetrics]) -> List[Dict[str, Any]]:
+    def _extract_failed_tests(self, all_metrics: list[EvaluationMetrics]) -> list[dict[str, Any]]:
         """Extract details of failed tests."""
         failed_tests = []
 
@@ -165,7 +166,7 @@ class EvaluationReportGenerator:
 
         return failed_tests
 
-    def _generate_chart_data(self, all_metrics: List[EvaluationMetrics]) -> Dict[str, Any]:
+    def _generate_chart_data(self, all_metrics: list[EvaluationMetrics]) -> dict[str, Any]:
         """Generate data for charts and visualizations."""
         chart_data = {}
 
@@ -225,7 +226,7 @@ class EvaluationReportGenerator:
 
         return chart_data
 
-    def export_to_csv(self, all_metrics: List[EvaluationMetrics], filename: str = None) -> Path:
+    def export_to_csv(self, all_metrics: list[EvaluationMetrics], filename: str = None) -> Path:
         """
         Export evaluation results to CSV.
 
@@ -268,10 +269,10 @@ class EvaluationReportGenerator:
 
     def generate_comparison_report(
         self,
-        baseline_metrics: List[EvaluationMetrics],
-        current_metrics: List[EvaluationMetrics],
+        baseline_metrics: list[EvaluationMetrics],
+        current_metrics: list[EvaluationMetrics],
         report_name: str = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generate comparison report between baseline and current results.
 
@@ -337,7 +338,7 @@ class EvaluationReportGenerator:
 
         return comparison_report
 
-    def generate_html_report(self, report: Dict[str, Any], output_path: Path = None) -> Path:
+    def generate_html_report(self, report: dict[str, Any], output_path: Path = None) -> Path:
         """
         Generate HTML report from JSON report.
 
@@ -359,7 +360,7 @@ class EvaluationReportGenerator:
         logger.info(f"HTML report saved to: {output_path}")
         return output_path
 
-    def _generate_html_template(self, report: Dict[str, Any]) -> str:
+    def _generate_html_template(self, report: dict[str, Any]) -> str:
         """Generate HTML template for report."""
         summary = report["summary"]
         metric_analysis = report.get("metric_analysis", {})

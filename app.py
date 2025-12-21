@@ -5,32 +5,28 @@ Interactive Streamlit interface for testing the agentic RAG system.
 """
 
 import asyncio
-import json
-import time
-from datetime import datetime
-
-import streamlit as st
 
 # Add project root to path
 import sys
+import time
 from pathlib import Path
+
+import streamlit as st
+
 sys.path.insert(0, str(Path(__file__).parent))
 
 try:
-    from services.rag_service.src.graph.graph import run_rag_pipeline
+    from services.rag_service.src.graph.graph import compile_rag_graph, run_rag_pipeline
     from services.rag_service.src.graph.state import create_initial_state
-    from services.rag_service.src.graph.graph import compile_rag_graph
 except ImportError:
     # Handle hyphenated directory names
-    import importlib.util
-    import os
 
     # Add services/rag-service/src to path
     rag_service_path = Path(__file__).parent / "services" / "rag-service" / "src"
     if rag_service_path.exists():
         sys.path.insert(0, str(rag_service_path))
 
-    from graph.graph import run_rag_pipeline, compile_rag_graph
+    from graph.graph import compile_rag_graph
     from graph.state import create_initial_state
 
 from shared.config.settings import get_settings

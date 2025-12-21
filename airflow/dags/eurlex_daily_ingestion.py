@@ -5,21 +5,22 @@ Scheduled pipeline to check for new/updated EU regulations daily.
 Uses the services/data-pipeline library components.
 """
 
+# Import data-pipeline components
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-# Import data-pipeline components
-import sys
+from airflow import DAG
+
 sys.path.insert(0, '/opt/airflow')
 
-from services.data_pipeline.src.clients import EURLexClient
-from services.data_pipeline.src.parsers import LegalDocumentParser
 from services.data_pipeline.src.chunking import LegalChunker
+from services.data_pipeline.src.clients import EURLexClient
 from services.data_pipeline.src.embeddings import EmbeddingGenerator
 from services.data_pipeline.src.indexing import QdrantIndexer
+from services.data_pipeline.src.parsers import LegalDocumentParser
 
 
 def fetch_new_documents(**context):

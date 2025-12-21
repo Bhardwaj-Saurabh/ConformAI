@@ -139,7 +139,7 @@ class Settings(BaseSettings):
         return self.environment == "development"
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """Get cached settings instance."""
     return Settings()

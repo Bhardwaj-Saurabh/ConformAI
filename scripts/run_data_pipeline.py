@@ -23,10 +23,11 @@ sys.path.insert(0, str(data_pipeline_root))
 
 from chunking import LegalChunker
 from clients import EURLexClient
-from data_pipeline_logging_utils import PipelineStageLogger, log_validation_result
+from data_pipeline_logging_utils import PipelineStageLogger
 from embeddings import EmbeddingGenerator
 from indexing import QdrantIndexer
 from parsers import LegalDocumentParser
+
 from shared.config import get_settings
 from shared.utils import get_logger
 

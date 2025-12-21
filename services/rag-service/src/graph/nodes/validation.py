@@ -3,11 +3,11 @@
 import re
 from typing import Any
 
+from graph.state import RAGState
 from langchain_core.messages import HumanMessage
+from llm.client import get_planning_llm, invoke_llm
 from pydantic import BaseModel
 
-from graph.state import RAGState
-from llm.client import get_planning_llm, invoke_llm
 from shared.utils.logger import get_logger
 from shared.utils.opik_tracer import track_langgraph_node
 
@@ -273,8 +273,8 @@ async def regenerate_with_citations(state: RAGState) -> dict[str, Any]:
     """
     logger.info("Regenerating answer with stricter grounding requirements")
 
-    from llm.client import get_generation_llm
     from langchain_core.messages import HumanMessage
+    from llm.client import get_generation_llm
 
     try:
         llm = get_generation_llm()

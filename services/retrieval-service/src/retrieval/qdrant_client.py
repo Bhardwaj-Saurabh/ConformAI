@@ -5,13 +5,11 @@ from typing import Any
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 from qdrant_client.models import (
-    Distance,
     FieldCondition,
     Filter,
     MatchValue,
     PointStruct,
     ScoredPoint,
-    VectorParams,
 )
 
 from shared.config.settings import get_settings

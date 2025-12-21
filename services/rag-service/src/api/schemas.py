@@ -1,8 +1,7 @@
 """API request and response schemas."""
 
-from pydantic import BaseModel, Field
-
 from graph.state import Citation
+from pydantic import BaseModel, Field
 
 
 class QueryRequest(BaseModel):

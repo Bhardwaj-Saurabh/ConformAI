@@ -4,6 +4,7 @@ from typing import Any
 
 from retrieval.embedder import get_embedding_service
 from retrieval.qdrant_client import get_qdrant_store
+
 from shared.config.settings import get_settings
 from shared.utils.logger import get_logger
 
