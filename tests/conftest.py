@@ -220,17 +220,22 @@ def mock_anthropic_client():
 
 @pytest.fixture
 def mock_openai_client():
-    """Mock OpenAI API client."""
+    """Mock OpenAI API client with dynamic batch size support."""
     with patch("openai.OpenAI") as mock:
         client = Mock()
 
-        # Mock embeddings.create
-        mock_embedding = Mock()
-        mock_embedding.embedding = [0.1] * 1024
-        mock_response = Mock()
-        mock_response.data = [mock_embedding]
+        # Mock embeddings.create with side_effect to handle variable batch sizes
+        def create_embeddings(**kwargs):
+            input_data = kwargs.get("input", [])
+            # Handle both single string and list of strings
+            batch_size = len(input_data) if isinstance(input_data, list) else 1
 
-        client.embeddings.create = Mock(return_value=mock_response)
+            # Create mock response with correct number of embeddings
+            mock_response = Mock()
+            mock_response.data = [Mock(embedding=[0.1] * 1024) for _ in range(batch_size)]
+            return mock_response
+
+        client.embeddings.create = Mock(side_effect=create_embeddings)
         mock.return_value = client
 
         yield client
@@ -238,15 +243,20 @@ def mock_openai_client():
 
 @pytest.fixture
 def mock_qdrant_client():
-    """Mock Qdrant client."""
+    """Mock Qdrant client (API v1.8+)."""
     with patch("qdrant_client.QdrantClient") as mock:
         client = Mock()
 
-        # Mock common methods
+        # Mock common methods for Qdrant client API v1.8+
         client.get_collections = Mock(return_value=Mock(collections=[]))
         client.create_collection = Mock()
         client.upsert = Mock()
-        client.search = Mock(return_value=[])
+
+        # Mock query_points (new API) - returns QueryResponse with points attribute
+        mock_query_response = Mock()
+        mock_query_response.points = []
+        client.query_points = Mock(return_value=mock_query_response)
+
         client.get_collection = Mock(return_value=Mock(points_count=0))
 
         mock.return_value = client

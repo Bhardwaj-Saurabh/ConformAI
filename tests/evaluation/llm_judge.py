@@ -5,8 +5,8 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
-from services.rag_service.src.llm.client import get_llm_client, invoke_llm
 
+from llm.client import get_llm_client, invoke_llm
 from tests.evaluation.base import BaseEvaluator, EvaluationResult, MetricType
 
 

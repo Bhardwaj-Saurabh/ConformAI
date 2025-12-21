@@ -404,9 +404,10 @@ class QdrantIndexer:
         """
         filter_condition = self._build_filter(filters) if filters else None
 
-        results = self.client.search(
+        # Use query_points for newer Qdrant client API (v1.8+)
+        results = self.client.query_points(
             collection_name=self.collection_name,
-            query_vector=query_vector,
+            query=query_vector,
             query_filter=filter_condition,
             limit=limit,
             score_threshold=score_threshold,
@@ -414,11 +415,11 @@ class QdrantIndexer:
 
         return [
             {
-                "id": result.id,
-                "score": result.score,
-                "payload": result.payload,
+                "id": point.id,
+                "score": point.score,
+                "payload": point.payload,
             }
-            for result in results
+            for point in results.points
         ]
 
     def close(self):

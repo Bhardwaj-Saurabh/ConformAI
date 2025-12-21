@@ -208,8 +208,8 @@ class QdrantVectorStore:
             return {
                 "name": self.collection_name,
                 "points_count": collection_info.points_count,
-                "vectors_count": collection_info.vectors_count,
-                "indexed_vectors_count": collection_info.indexed_vectors_count,
+                "vectors_count": collection_info.points_count,  # In newer API, points_count = vectors_count
+                "indexed_vectors_count": collection_info.indexed_vectors_count or 0,
                 "status": collection_info.status,
             }
 

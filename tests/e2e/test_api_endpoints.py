@@ -65,13 +65,31 @@ class TestQueryEndpoints:
 
     def test_query_endpoint_valid_request(self, api_client):
         """Test query endpoint with valid request."""
-        with patch("services.rag-service.src.graph.graph.run_rag_pipeline") as mock_rag:
+        with patch("api.main.run_rag_pipeline") as mock_rag:
             # Mock RAG pipeline response
             mock_rag.return_value = {
-                "answer": "High-risk AI systems must undergo conformity assessment.",
+                "final_answer": "High-risk AI systems must undergo conformity assessment.",
+                "citations": [
+                    {
+                        "source_id": 1,
+                        "regulation": "AI Act",
+                        "article": "43",
+                        "paragraph": None,
+                        "celex": "32021R1234",
+                        "excerpt": "High-risk AI systems must undergo conformity assessment.",
+                        "chunk_id": "chunk_1",
+                    }
+                ],
+                "all_retrieved_chunks": [],
                 "confidence_score": 0.92,
-                "sources": [],
-                "citations": ["AI Act Article 43"],
+                "intent": "compliance_question",
+                "ai_domain": None,
+                "risk_category": None,
+                "query_complexity": "simple",
+                "processing_time_ms": 100,
+                "total_llm_calls": 1,
+                "total_tokens_used": 50,
+                "iteration_count": 1,
             }
 
             response = api_client.post(
@@ -85,8 +103,8 @@ class TestQueryEndpoints:
             assert response.status_code == 200
             data = response.json()
             assert "answer" in data
-            assert "confidence_score" in data
-            assert data["confidence_score"] > 0.9
+            assert "metadata" in data
+            assert data["metadata"]["confidence_score"] > 0.9
 
     def test_query_endpoint_empty_query(self, api_client):
         """Test query endpoint with empty query."""
@@ -103,7 +121,7 @@ class TestQueryEndpoints:
 
     def test_query_endpoint_with_filters(self, api_client):
         """Test query endpoint with metadata filters."""
-        with patch("services.rag-service.src.graph.graph.run_rag_pipeline") as mock_rag:
+        with patch("api.main.run_rag_pipeline") as mock_rag:
             mock_rag.return_value = {
                 "answer": "GDPR requires...",
                 "confidence_score": 0.88,
@@ -125,7 +143,7 @@ class TestQueryEndpoints:
 
     def test_query_endpoint_with_conversation_id(self, api_client):
         """Test query endpoint with conversation ID for context."""
-        with patch("services.rag-service.src.graph.graph.run_rag_pipeline") as mock_rag:
+        with patch("api.main.run_rag_pipeline") as mock_rag:
             mock_rag.return_value = {
                 "answer": "Follow-up answer...",
                 "confidence_score": 0.85,
@@ -172,7 +190,7 @@ class TestAuthenticationAndRateLimiting:
 
     def test_api_key_authentication_valid(self, api_client):
         """Test API key authentication with valid key."""
-        with patch("services.rag-service.src.api.middleware.auth.verify_api_key") as mock_verify:
+        with patch("api.middleware.auth.verify_api_key") as mock_verify:
             mock_verify.return_value = True
 
             response = api_client.post(
@@ -187,7 +205,7 @@ class TestAuthenticationAndRateLimiting:
 
     def test_api_key_authentication_invalid(self, api_client):
         """Test API key authentication with invalid key."""
-        with patch("services.rag-service.src.api.middleware.auth.verify_api_key") as mock_verify:
+        with patch("api.middleware.auth.verify_api_key") as mock_verify:
             mock_verify.return_value = False
 
             response = api_client.post(
@@ -203,7 +221,7 @@ class TestAuthenticationAndRateLimiting:
     @pytest.mark.slow
     def test_rate_limiting(self, api_client):
         """Test rate limiting on API endpoints."""
-        with patch("services.rag-service.src.graph.graph.run_rag_pipeline") as mock_rag:
+        with patch("api.main.run_rag_pipeline") as mock_rag:
             mock_rag.return_value = {
                 "answer": "Test answer",
                 "confidence_score": 0.8,
@@ -233,7 +251,7 @@ class TestErrorHandling:
 
     def test_internal_error_handling(self, api_client):
         """Test handling of internal server errors."""
-        with patch("services.rag-service.src.graph.graph.run_rag_pipeline") as mock_rag:
+        with patch("api.main.run_rag_pipeline") as mock_rag:
             # Simulate internal error
             mock_rag.side_effect = Exception("Internal processing error")
 
