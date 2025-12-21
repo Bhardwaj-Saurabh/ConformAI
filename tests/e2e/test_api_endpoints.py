@@ -190,7 +190,7 @@ class TestAuthenticationAndRateLimiting:
 
     def test_api_key_authentication_valid(self, api_client):
         """Test API key authentication with valid key."""
-        with patch("api.middleware.auth.verify_api_key") as mock_verify:
+        with patch("api.middleware.auth.verify_api_key_and_rate_limit") as mock_verify:
             mock_verify.return_value = True
 
             response = api_client.post(
@@ -205,7 +205,7 @@ class TestAuthenticationAndRateLimiting:
 
     def test_api_key_authentication_invalid(self, api_client):
         """Test API key authentication with invalid key."""
-        with patch("api.middleware.auth.verify_api_key") as mock_verify:
+        with patch("api.middleware.auth.verify_api_key_and_rate_limit") as mock_verify:
             mock_verify.return_value = False
 
             response = api_client.post(
