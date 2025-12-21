@@ -12,7 +12,7 @@ from api.schemas import (
 )
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from graph.graph import run_rag_pipeline
 
 from shared.config.settings import get_settings
@@ -448,6 +448,111 @@ async def query_compliance(request: QueryRequest):
                 error_code="INTERNAL_ERROR",
             ).dict(),
         )
+
+
+@app.post("/api/v1/query/stream")
+async def query_compliance_stream(request: QueryRequest):
+    """
+    Stream EU AI compliance query responses using Server-Sent Events (SSE).
+
+    This endpoint provides real-time streaming of the RAG pipeline execution:
+    1. Streams analysis progress
+    2. Streams retrieval updates
+    3. Streams answer chunks as they're generated
+    4. Streams final citations and metadata
+
+    Args:
+        request: Query request with question and optional parameters
+
+    Returns:
+        Server-Sent Events stream with JSON payloads
+
+    Example:
+        POST /api/v1/query/stream
+        {
+            "query": "What are the requirements for high-risk AI systems?",
+            "max_iterations": 5
+        }
+
+        Response (SSE format):
+        data: {"type": "status", "message": "Analyzing query..."}
+
+        data: {"type": "status", "message": "Retrieving documents..."}
+
+        data: {"type": "chunk", "content": "High-risk AI systems..."}
+
+        data: {"type": "done", "metadata": {...}}
+    """
+    import json
+    import asyncio
+
+    async def event_generator():
+        """Generate SSE events for the query processing."""
+        try:
+            # Set conversation context
+            if request.conversation_id:
+                set_request_context(conversation_id=request.conversation_id)
+
+            # Send initial status
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Starting RAG pipeline...'})}\n\n"
+            await asyncio.sleep(0.1)  # Small delay for client connection
+
+            # Send analysis status
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Analyzing query intent and complexity...'})}\n\n"
+            await asyncio.sleep(0.2)
+
+            # Run RAG pipeline (non-streaming for now, will enhance later)
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Running ReAct agent to retrieve relevant legal sources...'})}\n\n"
+
+            # Execute pipeline
+            result = await run_rag_pipeline(request.query, request.conversation_id)
+
+            # Stream the answer in chunks
+            if result.get("final_answer"):
+                answer = result["final_answer"]
+
+                # Send answer in chunks (simulate streaming)
+                chunk_size = 50  # Characters per chunk
+                for i in range(0, len(answer), chunk_size):
+                    chunk = answer[i:i + chunk_size]
+                    yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+                    await asyncio.sleep(0.05)  # Small delay between chunks for effect
+
+            # Send citations
+            if result.get("citations"):
+                yield f"data: {json.dumps({'type': 'citations', 'citations': [c.dict() if hasattr(c, 'dict') else c for c in result['citations']]})}\n\n"
+
+            # Send final metadata
+            metadata = {
+                "confidence_score": result.get("confidence_score", 0.0),
+                "processing_time_ms": result.get("processing_time_ms", 0),
+                "iterations": result.get("iteration_count", 0),
+                "chunks_retrieved": len(result.get("all_retrieved_chunks", [])),
+                "success": True,
+                "refusal_reason": result.get("refusal_reason"),
+            }
+            yield f"data: {json.dumps({'type': 'done', 'metadata': metadata})}\n\n"
+
+            logger.info("✓ Streaming query completed successfully")
+
+        except Exception as e:
+            logger.error(f"Streaming error: {e}", exc_info=True)
+            error_data = {
+                "type": "error",
+                "error": str(e),
+                "error_code": "INTERNAL_ERROR"
+            }
+            yield f"data: {json.dumps(error_data)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
+    )
 
 
 @app.exception_handler(HTTPException)

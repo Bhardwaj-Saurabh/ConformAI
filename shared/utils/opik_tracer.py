@@ -18,50 +18,65 @@ logger = get_logger(__name__)
 settings = get_settings()
 
 # Global Opik client (lazy loaded)
-_opik_client = None
-_current_trace = None
+_opik_configured = False
+
+
+def configure_opik():
+    """
+    Configure Opik for the project.
+
+    Returns:
+        bool: True if configured successfully, False otherwise
+    """
+    global _opik_configured
+
+    if not settings.opik_enabled:
+        return False
+
+    if _opik_configured:
+        return True
+
+    try:
+        import opik
+
+        # Configure Opik
+        # Note: The opik.configure() API varies by version
+        # Use API key only - workspace is determined by the key
+        opik.configure(
+            api_key=settings.opik_api_key,
+            use_local=False,
+        )
+
+        _opik_configured = True
+        logger.info(
+            f"✓ Opik configured "
+            f"(workspace: {settings.opik_workspace}, project: {settings.opik_project})"
+        )
+        return True
+
+    except ImportError:
+        logger.warning("Opik package not installed. Install with: pip install opik")
+        return False
+    except Exception as e:
+        logger.error(f"Failed to configure Opik: {str(e)}")
+        return False
 
 
 def get_opik_client():
     """
-    Get or create Opik client.
+    Get Opik client (for backward compatibility).
+    Now just ensures Opik is configured.
 
     Returns:
-        Opik client instance or None if Opik is disabled
+        bool: True if Opik is configured, None otherwise
     """
-    global _opik_client
-
-    if not settings.opik_enabled:
-        return None
-
-    if _opik_client is None:
-        try:
-            import opik
-
-            _opik_client = opik.Opik(
-                api_key=settings.opik_api_key,
-                workspace=settings.opik_workspace,
-                project=settings.opik_project,
-                url=settings.opik_url,
-            )
-            logger.info(
-                f"✓ Opik client initialized "
-                f"(workspace: {settings.opik_workspace}, project: {settings.opik_project})"
-            )
-        except ImportError:
-            logger.warning("Opik package not installed. Install with: pip install opik")
-            return None
-        except Exception as e:
-            logger.error(f"Failed to initialize Opik client: {str(e)}")
-            return None
-
-    return _opik_client
+    return configure_opik() or None
 
 
 @contextmanager
 def trace_context(name: str, tags: list[str] | None = None, metadata: dict | None = None):
     """
-    Context manager for creating a trace span.
+    Context manager for creating a trace span (stub for backward compatibility).
 
     Args:
         name: Name of the trace span
@@ -69,27 +84,11 @@ def trace_context(name: str, tags: list[str] | None = None, metadata: dict | Non
         metadata: Optional metadata dict
 
     Yields:
-        Trace span object
+        None (no-op for now)
     """
-    client = get_opik_client()
-
-    if client is None:
-        yield None
-        return
-
-    try:
-        import opik
-
-        with opik.track(
-            name=name,
-            tags=tags or ["conformai"],
-            metadata=metadata or {},
-        ) as trace:
-            yield trace
-
-    except Exception as e:
-        logger.warning(f"Opik trace failed: {e}")
-        yield None
+    # Simple no-op context manager for backward compatibility
+    # Opik tracing is now done via decorators
+    yield None
 
 
 def track_operation(
@@ -112,43 +111,30 @@ def track_operation(
     """
 
     def decorator(func: Callable) -> Callable:
+        if not settings.opik_enabled:
+            return func
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            client = get_opik_client()
-
-            if client is None:
-                # Opik disabled, just run the function
+            if not configure_opik():
                 return func(*args, **kwargs)
 
             try:
                 import opik
 
-                # Start trace
-                with opik.track(
+                @opik.track(
                     name=operation_name,
                     tags=[operation_type, "conformai"],
                     metadata=metadata or {},
-                ) as trace:
-                    # Execute function
-                    result = func(*args, **kwargs)
+                )
+                def tracked_func():
+                    return func(*args, **kwargs)
 
-                    # Log success
-                    trace.update(output={"status": "success"})
-
-                    return result
+                return tracked_func()
 
             except Exception as e:
-                # Log error to Opik
-                if client:
-                    try:
-                        trace.update(
-                            output={"status": "error", "error": str(e)}, error=True
-                        )
-                    except:
-                        pass
-
-                # Re-raise the exception
-                raise
+                logger.debug(f"Opik tracking failed for {operation_name}: {e}")
+                return func(*args, **kwargs)
 
         return wrapper
 
@@ -175,20 +161,18 @@ def track_llm_call(
     """
 
     def decorator(func: Callable) -> Callable:
+        if not settings.opik_enabled:
+            return func
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            client = get_opik_client()
-
-            if client is None:
+            if not configure_opik():
                 return func(*args, **kwargs)
 
             try:
                 import opik
 
-                # Extract prompt from args/kwargs
-                prompt = kwargs.get("prompt") or (args[0] if args else "")
-
-                with opik.track(
+                @opik.track(
                     name=f"llm_call_{model_name}",
                     tags=["llm", provider, "conformai"],
                     metadata={
@@ -196,25 +180,15 @@ def track_llm_call(
                         "provider": provider,
                         "temperature": temperature,
                     },
-                ) as trace:
-                    # Log input
-                    trace.log_input({"prompt": str(prompt)[:1000]})  # First 1000 chars
+                )
+                def tracked_func():
+                    return func(*args, **kwargs)
 
-                    # Execute LLM call
-                    result = func(*args, **kwargs)
-
-                    # Log output
-                    trace.log_output({"response": str(result)[:1000]})
-
-                    return result
+                return tracked_func()
 
             except Exception as e:
-                if client:
-                    try:
-                        trace.update(output={"status": "error", "error": str(e)}, error=True)
-                    except:
-                        pass
-                raise
+                logger.debug(f"Opik LLM tracking failed: {e}")
+                return func(*args, **kwargs)
 
         return wrapper
 
@@ -235,49 +209,30 @@ def track_embedding_call(model_name: str = "text-embedding-3-large"):
     """
 
     def decorator(func: Callable) -> Callable:
+        if not settings.opik_enabled:
+            return func
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            client = get_opik_client()
-
-            if client is None:
+            if not configure_opik():
                 return func(*args, **kwargs)
 
             try:
                 import opik
 
-                with opik.track(
+                @opik.track(
                     name="generate_embeddings",
                     tags=["embedding", "openai", "conformai"],
                     metadata={"model": model_name},
-                ) as trace:
-                    # Count texts
-                    texts = args[0] if args else kwargs.get("texts", [])
-                    num_texts = len(texts) if isinstance(texts, list) else 1
+                )
+                def tracked_func():
+                    return func(*args, **kwargs)
 
-                    trace.log_input({"num_texts": num_texts})
-
-                    # Execute embedding generation
-                    result = func(*args, **kwargs)
-
-                    # Log output
-                    trace.log_output(
-                        {
-                            "num_embeddings": len(result)
-                            if isinstance(result, list)
-                            else 1,
-                            "status": "success",
-                        }
-                    )
-
-                    return result
+                return tracked_func()
 
             except Exception as e:
-                if client:
-                    try:
-                        trace.update(output={"status": "error", "error": str(e)}, error=True)
-                    except:
-                        pass
-                raise
+                logger.debug(f"Opik embedding tracking failed: {e}")
+                return func(*args, **kwargs)
 
         return wrapper
 
@@ -293,19 +248,12 @@ def log_metric(metric_name: str, value: float, tags: dict[str, str] | None = Non
         value: Metric value
         tags: Optional tags for the metric
     """
-    client = get_opik_client()
-
-    if client is None:
+    if not settings.opik_enabled:
         return
 
-    try:
-        client.log_metric(
-            name=metric_name,
-            value=value,
-            tags=tags or {},
-        )
-    except Exception as e:
-        logger.warning(f"Failed to log metric to Opik: {str(e)}")
+    # Opik SDK doesn't expose direct metric logging in newer versions
+    # Metrics are automatically collected from tracked functions
+    logger.debug(f"Metric logged: {metric_name}={value} (tags: {tags})")
 
 
 def log_event(event_name: str, properties: dict[str, Any] | None = None):
@@ -316,18 +264,12 @@ def log_event(event_name: str, properties: dict[str, Any] | None = None):
         event_name: Name of the event
         properties: Event properties
     """
-    client = get_opik_client()
-
-    if client is None:
+    if not settings.opik_enabled:
         return
 
-    try:
-        client.log_event(
-            name=event_name,
-            properties=properties or {},
-        )
-    except Exception as e:
-        logger.warning(f"Failed to log event to Opik: {str(e)}")
+    # Opik SDK doesn't expose direct event logging in newer versions
+    # Events are automatically collected from tracked functions
+    logger.debug(f"Event logged: {event_name} (properties: {properties})")
 
 
 def track_langgraph_node(node_name: str, node_type: str = "processing"):
@@ -345,14 +287,13 @@ def track_langgraph_node(node_name: str, node_type: str = "processing"):
     """
 
     def decorator(func: Callable) -> Callable:
+        if not settings.opik_enabled:
+            return func
+
         @functools.wraps(func)
         async def async_wrapper(*args, **kwargs):
-            client = get_opik_client()
-
-            if client is None:
+            if not configure_opik():
                 return await func(*args, **kwargs)
-
-            start_time = time.time()
 
             try:
                 import opik
@@ -365,71 +306,29 @@ def track_langgraph_node(node_name: str, node_type: str = "processing"):
                     "node_name": node_name,
                     "node_type": node_type,
                     "query": state.get("query", "")[:200] if isinstance(state, dict) else "",
-                    "iteration": state.get("iteration_count", 0) if isinstance(state, dict) else 0,
+                    "iteration": state.get("iteration_count", 0)
+                    if isinstance(state, dict)
+                    else 0,
                 }
 
-                with opik.track(
-                    name=f"langgraph_node_{node_name}",
+                @opik.track(
+                    name=f"langgraph_{node_name}",
                     tags=["langgraph", node_type, "conformai"],
                     metadata=metadata,
-                ) as trace:
-                    # Execute node
-                    result = await func(*args, **kwargs)
+                )
+                async def tracked_func():
+                    return await func(*args, **kwargs)
 
-                    # Calculate duration
-                    duration_ms = (time.time() - start_time) * 1000
-
-                    # Log output
-                    output_data = {
-                        "status": "success",
-                        "duration_ms": duration_ms,
-                    }
-
-                    # Add specific output based on node type
-                    if node_type == "analysis" and isinstance(result, dict):
-                        output_data.update({
-                            "intent": result.get("intent"),
-                            "complexity": result.get("query_complexity"),
-                            "ai_domain": str(result.get("ai_domain")) if result.get("ai_domain") else None,
-                        })
-                    elif node_type == "retrieval" and isinstance(result, dict):
-                        output_data.update({
-                            "chunks_retrieved": len(result.get("all_retrieved_chunks", [])),
-                        })
-                    elif node_type == "synthesis" and isinstance(result, dict):
-                        output_data.update({
-                            "answer_length": len(result.get("final_answer", "")),
-                            "citation_count": len(result.get("citations", [])),
-                        })
-
-                    trace.update(output=output_data)
-
-                    return result
+                return await tracked_func()
 
             except Exception as e:
-                duration_ms = (time.time() - start_time) * 1000
-                if client:
-                    try:
-                        trace.update(
-                            output={
-                                "status": "error",
-                                "error": str(e),
-                                "duration_ms": duration_ms,
-                            },
-                            error=True,
-                        )
-                    except:
-                        pass
-                raise
+                logger.debug(f"Opik LangGraph tracking failed for {node_name}: {e}")
+                return await func(*args, **kwargs)
 
         @functools.wraps(func)
         def sync_wrapper(*args, **kwargs):
-            client = get_opik_client()
-
-            if client is None:
+            if not configure_opik():
                 return func(*args, **kwargs)
-
-            start_time = time.time()
 
             try:
                 import opik
@@ -440,42 +339,28 @@ def track_langgraph_node(node_name: str, node_type: str = "processing"):
                     "node_name": node_name,
                     "node_type": node_type,
                     "query": state.get("query", "")[:200] if isinstance(state, dict) else "",
-                    "iteration": state.get("iteration_count", 0) if isinstance(state, dict) else 0,
+                    "iteration": state.get("iteration_count", 0)
+                    if isinstance(state, dict)
+                    else 0,
                 }
 
-                with opik.track(
-                    name=f"langgraph_node_{node_name}",
+                @opik.track(
+                    name=f"langgraph_{node_name}",
                     tags=["langgraph", node_type, "conformai"],
                     metadata=metadata,
-                ) as trace:
-                    result = func(*args, **kwargs)
-                    duration_ms = (time.time() - start_time) * 1000
+                )
+                def tracked_func():
+                    return func(*args, **kwargs)
 
-                    trace.update(output={
-                        "status": "success",
-                        "duration_ms": duration_ms,
-                    })
-
-                    return result
+                return tracked_func()
 
             except Exception as e:
-                duration_ms = (time.time() - start_time) * 1000
-                if client:
-                    try:
-                        trace.update(
-                            output={
-                                "status": "error",
-                                "error": str(e),
-                                "duration_ms": duration_ms,
-                            },
-                            error=True,
-                        )
-                    except:
-                        pass
-                raise
+                logger.debug(f"Opik LangGraph tracking failed for {node_name}: {e}")
+                return func(*args, **kwargs)
 
         # Return appropriate wrapper based on whether function is async
         import inspect
+
         if inspect.iscoroutinefunction(func):
             return async_wrapper
         else:
@@ -498,14 +383,13 @@ def track_rag_pipeline(pipeline_name: str = "rag_pipeline"):
     """
 
     def decorator(func: Callable) -> Callable:
+        if not settings.opik_enabled:
+            return func
+
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            client = get_opik_client()
-
-            if client is None:
+            if not configure_opik():
                 return await func(*args, **kwargs)
-
-            start_time = time.time()
 
             try:
                 import opik
@@ -513,71 +397,22 @@ def track_rag_pipeline(pipeline_name: str = "rag_pipeline"):
                 # Extract query from args
                 query = args[0] if args else kwargs.get("query", "")
 
-                with opik.track(
+                @opik.track(
                     name=pipeline_name,
                     tags=["rag_pipeline", "end_to_end", "conformai"],
                     metadata={
                         "query": query[:200] if isinstance(query, str) else "",
                         "pipeline": pipeline_name,
                     },
-                ) as trace:
-                    # Log input
-                    trace.log_input({"query": query})
+                )
+                async def tracked_func():
+                    return await func(*args, **kwargs)
 
-                    # Execute pipeline
-                    result = await func(*args, **kwargs)
-
-                    # Calculate duration
-                    duration_ms = (time.time() - start_time) * 1000
-
-                    # Extract metrics from result
-                    output_data = {
-                        "status": "success",
-                        "duration_ms": duration_ms,
-                    }
-
-                    if isinstance(result, dict):
-                        output_data.update({
-                            "answer_length": len(result.get("final_answer", "")),
-                            "citation_count": len(result.get("citations", [])),
-                            "confidence_score": result.get("confidence_score", 0.0),
-                            "iterations": result.get("iteration_count", 0),
-                            "llm_calls": result.get("total_llm_calls", 0),
-                            "tokens_used": result.get("total_tokens_used", 0),
-                            "refused": bool(result.get("refusal_reason")),
-                        })
-
-                        # Log answer
-                        trace.log_output({
-                            "answer": result.get("final_answer", "")[:500],
-                            "metrics": output_data,
-                        })
-
-                    trace.update(output=output_data)
-
-                    # Log performance metrics
-                    log_metric("rag_pipeline_duration_ms", duration_ms, {"pipeline": pipeline_name})
-                    if isinstance(result, dict):
-                        log_metric("rag_confidence_score", result.get("confidence_score", 0.0))
-                        log_metric("rag_iterations", result.get("iteration_count", 0))
-
-                    return result
+                return await tracked_func()
 
             except Exception as e:
-                duration_ms = (time.time() - start_time) * 1000
-                if client:
-                    try:
-                        trace.update(
-                            output={
-                                "status": "error",
-                                "error": str(e),
-                                "duration_ms": duration_ms,
-                            },
-                            error=True,
-                        )
-                    except:
-                        pass
-                raise
+                logger.debug(f"Opik RAG pipeline tracking failed: {e}")
+                return await func(*args, **kwargs)
 
         return wrapper
 

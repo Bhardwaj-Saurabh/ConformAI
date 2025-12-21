@@ -5,12 +5,14 @@ Interactive Streamlit interface for testing the agentic RAG system.
 """
 
 import asyncio
+import json
 
 # Add project root to path
 import sys
 import time
 from pathlib import Path
 
+import requests
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -90,6 +92,103 @@ st.markdown("""
 if 'history' not in st.session_state:
     st.session_state.history = []
 
+
+def process_streaming_query(api_url: str, query: str, placeholder_container):
+    """Process a streaming query and update UI in real-time."""
+    status_placeholder = placeholder_container.empty()
+    answer_placeholder = placeholder_container.empty()
+
+    answer_chunks = []
+    result = {
+        "query": query,
+        "final_answer": "",
+        "citations": [],
+        "confidence_score": 0.0,
+        "processing_time_ms": 0,
+        "iteration_count": 0,
+        "all_retrieved_chunks": [],
+        "success": False
+    }
+
+    try:
+        start_time = time.time()
+
+        # Call streaming endpoint
+        response = requests.post(
+            f"{api_url}/api/v1/query/stream",
+            json={"query": query},
+            stream=True,
+            headers={"Accept": "text/event-stream"},
+            timeout=120
+        )
+
+        response.raise_for_status()
+
+        # Process SSE stream
+        for line in response.iter_lines():
+            if not line:
+                continue
+
+            line_str = line.decode('utf-8')
+
+            # SSE format: "data: {...}"
+            if line_str.startswith('data: '):
+                data_str = line_str[6:]  # Remove "data: " prefix
+
+                try:
+                    event = json.loads(data_str)
+                    event_type = event.get('type')
+
+                    if event_type == 'status':
+                        # Update status message
+                        status_placeholder.info(f"🤖 {event.get('message')}")
+
+                    elif event_type == 'chunk':
+                        # Add answer chunk
+                        chunk = event.get('content', '')
+                        answer_chunks.append(chunk)
+
+                        # Update answer display
+                        current_answer = ''.join(answer_chunks)
+                        answer_placeholder.markdown(f"**💡 Answer:**\n\n{current_answer}")
+
+                    elif event_type == 'citations':
+                        # Store citations
+                        result['citations'] = event.get('citations', [])
+
+                    elif event_type == 'done':
+                        # Final metadata
+                        metadata = event.get('metadata', {})
+                        result.update(metadata)
+                        result['success'] = True
+                        status_placeholder.success("✅ Query completed successfully!")
+
+                    elif event_type == 'error':
+                        # Error occurred
+                        error_msg = event.get('error', 'Unknown error')
+                        status_placeholder.error(f"❌ Error: {error_msg}")
+                        result['refusal_reason'] = error_msg
+                        return result
+
+                except json.JSONDecodeError:
+                    continue
+
+        # Calculate total time
+        processing_time = (time.time() - start_time) * 1000
+        result['processing_time_ms'] = processing_time
+        result['final_answer'] = ''.join(answer_chunks)
+
+        return result
+
+    except requests.exceptions.RequestException as e:
+        status_placeholder.error(f"❌ API Error: {str(e)}")
+        result['refusal_reason'] = str(e)
+        return result
+    except Exception as e:
+        status_placeholder.error(f"❌ Streaming Error: {str(e)}")
+        result['refusal_reason'] = str(e)
+        return result
+
 # Header
 st.markdown('<div class="main-header">🤖 ConformAI Agent Tester</div>', unsafe_allow_html=True)
 st.markdown("Test the agentic RAG system with query decomposition and ReAct agent")
@@ -107,6 +206,13 @@ with st.sidebar:
         value=5,
         help="Maximum number of ReAct loop iterations"
     )
+
+    # Execution mode
+    st.subheader("Execution Mode")
+    use_streaming = st.checkbox("Enable Streaming 🔥", value=True,
+                                help="Stream responses in real-time via API (recommended)")
+    api_url = st.text_input("API URL", value="http://localhost:8000",
+                           help="RAG service API endpoint")
 
     # Display settings
     st.subheader("Display Options")
@@ -185,92 +291,107 @@ with col2:
 
 # Process query
 if submit_button and query:
-    with st.spinner("🤖 Agent is thinking..."):
-        try:
-            # Run the RAG pipeline
-            start_time = time.time()
+    # Create placeholder for streaming updates
+    stream_container = st.container()
 
-            # Create initial state with custom max_iterations
-            initial_state = create_initial_state(query)
-            initial_state["max_iterations"] = max_iterations
+    try:
+        if use_streaming:
+            # Streaming mode via API
+            with stream_container:
+                st.info("🔥 **Streaming Mode Enabled** - Watch the response appear in real-time!")
+                stream_placeholder = st.empty()
 
-            # Compile and run graph
-            graph = compile_rag_graph()
+                result = process_streaming_query(api_url, query, stream_placeholder)
 
-            # Run asynchronously
-            result = asyncio.run(graph.ainvoke(initial_state))
+        else:
+            # Non-streaming mode (direct graph execution)
+            with st.spinner("🤖 Agent is thinking..."):
+                # Run the RAG pipeline
+                start_time = time.time()
 
-            # Calculate processing time
-            processing_time = (time.time() - start_time) * 1000
-            result["processing_time_ms"] = processing_time
+                # Create initial state with custom max_iterations
+                initial_state = create_initial_state(query)
+                initial_state["max_iterations"] = max_iterations
 
-            # Save to history
-            st.session_state.history.append(result)
+                # Compile and run graph
+                graph = compile_rag_graph()
 
-            # Display results
+                # Run asynchronously
+                result = asyncio.run(graph.ainvoke(initial_state))
+
+                # Calculate processing time
+                processing_time = (time.time() - start_time) * 1000
+                result["processing_time_ms"] = processing_time
+
+        # Save to history
+        st.session_state.history.append(result)
+
+        # Display results
+        if not use_streaming:  # Skip success message for streaming (already shown)
             st.success("✅ Query processed successfully!")
 
-            # Query Analysis
-            st.markdown('<div class="sub-header">🔍 Query Analysis</div>', unsafe_allow_html=True)
+        # Query Analysis
+        st.markdown('<div class="sub-header">🔍 Query Analysis</div>', unsafe_allow_html=True)
 
-            col_a1, col_a2, col_a3, col_a4 = st.columns(4)
-            with col_a1:
-                st.metric("Intent", result.get("intent", "unknown"))
-            with col_a2:
-                st.metric("Complexity", result.get("query_complexity", "unknown"))
-            with col_a3:
-                domain = result.get("ai_domain")
-                st.metric("AI Domain", str(domain) if domain else "general")
-            with col_a4:
-                risk = result.get("risk_category")
-                st.metric("Risk Category", str(risk) if risk else "N/A")
+        col_a1, col_a2, col_a3, col_a4 = st.columns(4)
+        with col_a1:
+            st.metric("Intent", result.get("intent", "unknown"))
+        with col_a2:
+            st.metric("Complexity", result.get("query_complexity", "unknown"))
+        with col_a3:
+            domain = result.get("ai_domain")
+            st.metric("AI Domain", str(domain) if domain else "general")
+        with col_a4:
+            risk = result.get("risk_category")
+            st.metric("Risk Category", str(risk) if risk else "N/A")
 
-            # Sub-queries
-            if show_subqueries and result.get("sub_queries"):
-                st.markdown('<div class="sub-header">📋 Query Decomposition</div>', unsafe_allow_html=True)
+        # Sub-queries
+        if show_subqueries and result.get("sub_queries"):
+            st.markdown('<div class="sub-header">📋 Query Decomposition</div>', unsafe_allow_html=True)
 
-                if result.get("decomposition_needed"):
-                    st.info(f"Complex query decomposed into {len(result['sub_queries'])} sub-questions")
+            if result.get("decomposition_needed"):
+                st.info(f"Complex query decomposed into {len(result['sub_queries'])} sub-questions")
 
-                for i, sq in enumerate(result["sub_queries"]):
-                    priority_emoji = "🔴" if sq.priority == 1 else "🟡" if sq.priority == 2 else "🟢"
-                    status_emoji = "✅" if sq.status == "completed" else "⏳" if sq.status == "in_progress" else "⏸️"
+            for i, sq in enumerate(result["sub_queries"]):
+                priority_emoji = "🔴" if sq.priority == 1 else "🟡" if sq.priority == 2 else "🟢"
+                status_emoji = "✅" if sq.status == "completed" else "⏳" if sq.status == "in_progress" else "⏸️"
 
+                st.markdown(f"""
+                <div class="sub-query">
+                    <strong>{priority_emoji} {status_emoji} Sub-Query {i+1}</strong> (Priority: {sq.priority}, Aspect: {sq.aspect})<br/>
+                    <em>{sq.question}</em>
+                </div>
+                """, unsafe_allow_html=True)
+
+        # Agent Reasoning
+        if show_reasoning and result.get("agent_actions"):
+            st.markdown('<div class="sub-header">🧠 Agent Reasoning (ReAct Loop)</div>', unsafe_allow_html=True)
+
+            st.info(f"Agent completed {result.get('iteration_count', 0)} iterations")
+
+            for action in result["agent_actions"]:
+                with st.expander(f"Step {action.step}: {action.action}"):
                     st.markdown(f"""
-                    <div class="sub-query">
-                        <strong>{priority_emoji} {status_emoji} Sub-Query {i+1}</strong> (Priority: {sq.priority}, Aspect: {sq.aspect})<br/>
-                        <em>{sq.question}</em>
+                    <div class="agent-step">
+                        <strong>💭 Thought:</strong><br/>
+                        {action.thought}<br/><br/>
+                        <strong>🔧 Action:</strong> <code>{action.action}</code><br/><br/>
+                        <strong>👀 Observation:</strong><br/>
+                        {action.observation or "No observation recorded"}
                     </div>
                     """, unsafe_allow_html=True)
 
-            # Agent Reasoning
-            if show_reasoning and result.get("agent_actions"):
-                st.markdown('<div class="sub-header">🧠 Agent Reasoning (ReAct Loop)</div>', unsafe_allow_html=True)
+        # Retrieval Details
+        if show_retrievals and result.get("retrieval_history"):
+            st.markdown('<div class="sub-header">🔎 Retrieval History</div>', unsafe_allow_html=True)
 
-                st.info(f"Agent completed {result.get('iteration_count', 0)} iterations")
-
-                for action in result["agent_actions"]:
-                    with st.expander(f"Step {action.step}: {action.action}"):
-                        st.markdown(f"""
-                        <div class="agent-step">
-                            <strong>💭 Thought:</strong><br/>
-                            {action.thought}<br/><br/>
-                            <strong>🔧 Action:</strong> <code>{action.action}</code><br/><br/>
-                            <strong>👀 Observation:</strong><br/>
-                            {action.observation or "No observation recorded"}
-                        </div>
-                        """, unsafe_allow_html=True)
-
-            # Retrieval Details
-            if show_retrievals and result.get("retrieval_history"):
-                st.markdown('<div class="sub-header">🔎 Retrieval History</div>', unsafe_allow_html=True)
-
-                for i, retrieval in enumerate(result["retrieval_history"]):
-                    st.markdown(f"""
+            for i, retrieval in enumerate(result["retrieval_history"]):
+                st.markdown(f"""
 **Retrieval {i+1}:** Retrieved {retrieval.get('count', 0)} chunks for query: *"{retrieval.get('query', '')[:100]}..."*
-                    """)
+                """)
 
-            # Final Answer
+        # Final Answer (skip if streaming already showed it)
+        if not use_streaming or not result.get("final_answer"):
             st.markdown('<div class="sub-header">💡 Final Answer</div>', unsafe_allow_html=True)
 
             if result.get("refusal_reason"):
@@ -280,64 +401,78 @@ if submit_button and query:
             else:
                 st.warning("No answer generated")
 
-            # Citations
-            if result.get("citations"):
-                st.markdown('<div class="sub-header">📚 Citations</div>', unsafe_allow_html=True)
+        # Citations
+        if result.get("citations"):
+            st.markdown('<div class="sub-header">📚 Citations</div>', unsafe_allow_html=True)
 
-                for i, citation in enumerate(result["citations"]):
-                    st.markdown(f"""
-                    <div class="citation">
-                        <strong>Source {citation.source_id}:</strong> {citation.regulation}
-                        {f", {citation.article}" if citation.article else ""}
-                        {f" (CELEX: {citation.celex})" if citation.celex else ""}<br/>
-                        <em>{citation.excerpt[:150]}...</em>
-                    </div>
-                    """, unsafe_allow_html=True)
+            for i, citation in enumerate(result["citations"]):
+                # Handle both Citation objects and dicts
+                if isinstance(citation, dict):
+                    source_id = citation.get('source_id', i+1)
+                    regulation = citation.get('regulation', '')
+                    article = citation.get('article', '')
+                    celex = citation.get('celex', '')
+                    excerpt = citation.get('excerpt', '')
+                else:
+                    source_id = citation.source_id if hasattr(citation, 'source_id') else i+1
+                    regulation = citation.regulation if hasattr(citation, 'regulation') else ''
+                    article = citation.article if hasattr(citation, 'article') else ''
+                    celex = citation.celex if hasattr(citation, 'celex') else ''
+                    excerpt = citation.excerpt if hasattr(citation, 'excerpt') else ''
 
-            # Metadata
-            st.markdown('<div class="sub-header">📊 Performance Metrics</div>', unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="citation">
+                    <strong>Source {source_id}:</strong> {regulation}
+                    {f", {article}" if article else ""}
+                    {f" (CELEX: {celex})" if celex else ""}<br/>
+                    <em>{excerpt[:150] if excerpt else ""}...</em>
+                </div>
+                """, unsafe_allow_html=True)
 
-            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-            with col_m1:
-                st.metric("Processing Time", f"{result.get('processing_time_ms', 0):.0f}ms")
-            with col_m2:
-                st.metric("Confidence Score", f"{result.get('confidence_score', 0):.2f}")
-            with col_m3:
-                st.metric("Iterations", result.get('iteration_count', 0))
-            with col_m4:
-                st.metric("Total Chunks", len(result.get('all_retrieved_chunks', [])))
+        # Metadata
+        st.markdown('<div class="sub-header">📊 Performance Metrics</div>', unsafe_allow_html=True)
 
-            col_m5, col_m6, col_m7, col_m8 = st.columns(4)
-            with col_m5:
-                st.metric("Sub-Questions", len(result.get('sub_queries', [])))
-            with col_m6:
-                st.metric("Citations", len(result.get('citations', [])))
-            with col_m7:
-                scores = result.get('retrieval_scores', [])
-                avg_score = sum(scores) / len(scores) if scores else 0
-                st.metric("Avg Retrieval Score", f"{avg_score:.2f}")
-            with col_m8:
-                st.metric("Grounding Validated", "✅" if result.get('grounding_validated') else "❌")
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+        with col_m1:
+            st.metric("Processing Time", f"{result.get('processing_time_ms', 0):.0f}ms")
+        with col_m2:
+            st.metric("Confidence Score", f"{result.get('confidence_score', 0):.2f}")
+        with col_m3:
+            st.metric("Iterations", result.get('iteration_count', 0))
+        with col_m4:
+            st.metric("Total Chunks", len(result.get('all_retrieved_chunks', [])))
 
-            # Reasoning Trace
-            if result.get("reasoning_trace"):
-                with st.expander("🗺️ View Reasoning Trace"):
-                    for i, step in enumerate(result["reasoning_trace"]):
-                        st.markdown(f"{i+1}. {step}")
+        col_m5, col_m6, col_m7, col_m8 = st.columns(4)
+        with col_m5:
+            st.metric("Sub-Questions", len(result.get('sub_queries', [])))
+        with col_m6:
+            st.metric("Citations", len(result.get('citations', [])))
+        with col_m7:
+            scores = result.get('retrieval_scores', [])
+            avg_score = sum(scores) / len(scores) if scores else 0
+            st.metric("Avg Retrieval Score", f"{avg_score:.2f}")
+        with col_m8:
+            st.metric("Grounding Validated", "✅" if result.get('grounding_validated') else "❌")
 
-            # Raw State (Debug)
-            if show_raw_state:
-                with st.expander("🔧 Raw State (Debug)"):
-                    # Convert to JSON-serializable format
-                    debug_state = {
-                        k: str(v) if not isinstance(v, (str, int, float, bool, list, dict, type(None))) else v
-                        for k, v in result.items()
-                    }
-                    st.json(debug_state)
+        # Reasoning Trace
+        if result.get("reasoning_trace"):
+            with st.expander("🗺️ View Reasoning Trace"):
+                for i, step in enumerate(result["reasoning_trace"]):
+                    st.markdown(f"{i+1}. {step}")
 
-        except Exception as e:
-            st.error(f"❌ Error processing query: {str(e)}")
-            st.exception(e)
+        # Raw State (Debug)
+        if show_raw_state:
+            with st.expander("🔧 Raw State (Debug)"):
+                # Convert to JSON-serializable format
+                debug_state = {
+                    k: str(v) if not isinstance(v, (str, int, float, bool, list, dict, type(None))) else v
+                    for k, v in result.items()
+                }
+                st.json(debug_state)
+
+    except Exception as e:
+        st.error(f"❌ Error processing query: {str(e)}")
+        st.exception(e)
 
 # Query History
 if st.session_state.history:
