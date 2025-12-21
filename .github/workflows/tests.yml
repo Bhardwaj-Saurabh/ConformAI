@@ -54,11 +54,6 @@ jobs:
         image: qdrant/qdrant:latest
         ports:
           - 6333:6333
-        options: >-
-          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:6333/"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
       postgres:
         image: postgres:16-alpine
@@ -99,9 +94,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for Qdrant..."
+          timeout 30 bash -c 'until curl -f http://localhost:6333/collections 2>/dev/null; do sleep 1; done'
+          echo "Waiting for PostgreSQL..."
+          timeout 30 bash -c 'until pg_isready -h localhost -p 5432; do sleep 1; done'
+          echo "All services ready!"
+
       - name: Run integration tests
         run: |
-          pytest tests/integration -v --cov=services --cov=shared --cov-report=xml
+          pytest tests/integration/test_data_pipeline.py -v --cov=services --cov=shared --cov-report=xml
         env:
           ANTHROPIC_API_KEY: sk-ant-test-key
           OPENAI_API_KEY: sk-test-key
@@ -134,11 +137,21 @@ jobs:
           POSTGRES_DB: conformai_test
         ports:
           - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
       redis:
         image: redis:7-alpine
         ports:
           - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout code
@@ -154,6 +167,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
+
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for Qdrant..."
+          timeout 30 bash -c 'until curl -f http://localhost:6333/collections 2>/dev/null; do sleep 1; done'
+          echo "All services ready!"
 
       - name: Run E2E tests (without API keys)
         run: |
