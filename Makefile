@@ -28,6 +28,7 @@ help:
 	@echo "Database:"
 	@echo "  make db-migrate     Run database migrations"
 	@echo "  make db-upgrade     Upgrade database schema"
+	@echo "  make db-init-memory Initialize conversation & memory tables"
 
 # Installation
 install:
@@ -95,6 +96,9 @@ db-migrate:
 
 db-upgrade:
 	alembic upgrade head
+
+db-init-memory:
+	python scripts/init_memory_database.py
 
 # Cleanup
 clean:

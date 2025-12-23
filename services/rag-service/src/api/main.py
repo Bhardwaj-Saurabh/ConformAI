@@ -27,6 +27,14 @@ except ImportError:
     HEALTH_ROUTER_AVAILABLE = False
     logger.warning("Health router not available, using basic health check")
 
+# Import conversation management router
+try:
+    from api.conversations import router as conversations_router
+    CONVERSATIONS_ROUTER_AVAILABLE = True
+except ImportError:
+    CONVERSATIONS_ROUTER_AVAILABLE = False
+    logger.warning("Conversations router not available")
+
 settings = get_settings()
 logger = get_logger(__name__)
 
@@ -130,6 +138,11 @@ app.add_middleware(
 if HEALTH_ROUTER_AVAILABLE:
     app.include_router(health_router)
     logger.info("Comprehensive health check endpoints enabled")
+
+# Include conversation management router if available
+if CONVERSATIONS_ROUTER_AVAILABLE:
+    app.include_router(conversations_router)
+    logger.info("Conversation management endpoints enabled")
 
 
 # ===== Global Error Handlers =====
@@ -282,6 +295,8 @@ async def query_compliance(request: QueryRequest):
             "query_preview": request.query[:100],
             "max_iterations": request.max_iterations,
             "has_conversation_id": bool(request.conversation_id),
+            "has_user_id": bool(request.user_id),
+            "memory_enabled": bool(request.conversation_id and request.user_id),
         }
     )
 
@@ -292,6 +307,7 @@ async def query_compliance(request: QueryRequest):
         result="processing",
         query_length=len(request.query),
         max_iterations=request.max_iterations,
+        has_user_id=bool(request.user_id),
     )
 
     # Log request event to Opik
@@ -299,17 +315,18 @@ async def query_compliance(request: QueryRequest):
         "query_length": len(request.query),
         "max_iterations": request.max_iterations,
         "has_conversation_id": bool(request.conversation_id),
+        "has_user_id": bool(request.user_id),
     })
 
     try:
         # Update max iterations if provided
         from graph.state import create_initial_state
 
-        initial_state = create_initial_state(request.query, request.conversation_id)
+        initial_state = create_initial_state(request.query, request.conversation_id, request.user_id)
         initial_state["max_iterations"] = request.max_iterations
 
-        # Run RAG pipeline
-        result = await run_rag_pipeline(request.query, request.conversation_id)
+        # Run RAG pipeline with memory context
+        result = await run_rag_pipeline(request.query, request.conversation_id, request.user_id)
 
         # Check if refused
         if result.get("refusal_reason"):
@@ -497,6 +514,11 @@ async def query_compliance_stream(request: QueryRequest):
             yield f"data: {json.dumps({'type': 'status', 'message': 'Starting RAG pipeline...'})}\n\n"
             await asyncio.sleep(0.1)  # Small delay for client connection
 
+            # Send memory retrieval status if user_id is provided
+            if request.user_id:
+                yield f"data: {json.dumps({'type': 'status', 'message': 'Retrieving conversation history and user context...'})}\n\n"
+                await asyncio.sleep(0.2)
+
             # Send analysis status
             yield f"data: {json.dumps({'type': 'status', 'message': 'Analyzing query intent and complexity...'})}\n\n"
             await asyncio.sleep(0.2)
@@ -504,8 +526,8 @@ async def query_compliance_stream(request: QueryRequest):
             # Run RAG pipeline (non-streaming for now, will enhance later)
             yield f"data: {json.dumps({'type': 'status', 'message': 'Running ReAct agent to retrieve relevant legal sources...'})}\n\n"
 
-            # Execute pipeline
-            result = await run_rag_pipeline(request.query, request.conversation_id)
+            # Execute pipeline with memory context
+            result = await run_rag_pipeline(request.query, request.conversation_id, request.user_id)
 
             # Stream the answer in chunks
             if result.get("final_answer"):

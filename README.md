@@ -9,6 +9,7 @@ ConformAI is a production-grade Retrieval-Augmented Generation (RAG) system desi
 - **Real-time Regulatory Awareness**: Continuously ingests the latest EU legal texts from official sources (EUR-Lex, EDPB, EDPS)
 - **Legal-Grade RAG**: Article-level chunking, hybrid search (semantic + BM25), citation enforcement
 - **LangGraph Orchestration**: Intelligent state machine for query analysis, retrieval, and grounded answer generation
+- **Conversation Memory**: Multi-turn conversations with persistent message history and user-specific long-term memory
 - **Airflow Data Pipeline**: Automated ingestion, parsing, chunking, and indexing of legal documents
 - **Microservices Architecture**: Scalable API Gateway, RAG Service, Retrieval Service, and Data Pipeline
 - **Vector Search**: Qdrant-powered semantic search with metadata filtering
@@ -63,6 +64,9 @@ make docker-up
 
 # Initialize databases and collections
 make init
+
+# Initialize memory database (conversation & user memory tables)
+make db-init-memory
 
 # Initialize Airflow
 make airflow-init
@@ -174,6 +178,47 @@ curl -X POST "http://localhost:8000/api/v1/classify-usecase" \
   }'
 ```
 
+### Conversation Memory (Multi-Turn Queries)
+
+```bash
+# 1. Create a conversation
+curl -X POST "http://localhost:8000/api/v1/conversations/create" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "user-123",
+    "title": "EU AI Act Compliance Questions"
+  }'
+# Returns: {"conversation_id": "conv-456", ...}
+
+# 2. Query with conversation context
+curl -X POST "http://localhost:8000/api/v1/query" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What are high-risk AI systems?",
+    "user_id": "user-123",
+    "conversation_id": "conv-456"
+  }'
+
+# 3. Follow-up query (uses conversation history)
+curl -X POST "http://localhost:8000/api/v1/query" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What documentation do they require?",
+    "user_id": "user-123",
+    "conversation_id": "conv-456"
+  }'
+
+# 4. Get conversation history
+curl -X POST "http://localhost:8000/api/v1/conversations/history" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "conv-456",
+    "limit": 10
+  }'
+```
+
+See [Memory System Documentation](docs/MEMORY_SYSTEM.md) for complete guide on conversation persistence and user memory.
+
 ## Data Pipeline
 
 The system uses Apache Airflow to orchestrate data ingestion and processing:
@@ -255,6 +300,7 @@ kubectl scale deployment rag-service --replicas=3 -n conformai
 ### Architecture & Planning
 - [System Architecture](docs/ARCHITECTURE.md) - Complete system architecture with Mermaid diagrams
 - [Getting Started Guide](docs/GETTING_STARTED.md) - Comprehensive getting started guide
+- [Memory System](docs/MEMORY_SYSTEM.md) - Conversation persistence and user memory guide
 - [Technical Implementation Plan](TECHNICAL_IMPLEMENTATION_PLAN.md)
 - [Project Roadmap](CLAUDE.md)
 

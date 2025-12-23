@@ -55,7 +55,15 @@ class RAGState(TypedDict, total=False):
     # ===== Input =====
     query: str  # User's original question
     conversation_id: str | None  # Optional conversation tracking
+    user_id: str | None  # User identifier for memory
     user_context: dict[str, Any] | None  # Additional user-provided context
+
+    # ===== Memory & Context =====
+    conversation_history: list[dict[str, Any]]  # Previous messages in conversation
+    conversation_context_summary: str  # Summary of recent conversation
+    user_memories: list[dict[str, Any]]  # Long-term user memories
+    user_profile: dict[str, Any]  # Structured user profile from memories
+    user_context_summary: str  # Summary of user facts/preferences
 
     # ===== Query Analysis =====
     intent: str  # compliance_question, risk_assessment, obligation_lookup, etc.
@@ -108,13 +116,16 @@ class RAGState(TypedDict, total=False):
     retry_count: int  # Number of retries attempted
 
 
-def create_initial_state(query: str, conversation_id: str | None = None) -> RAGState:
+def create_initial_state(
+    query: str, conversation_id: str | None = None, user_id: str | None = None
+) -> RAGState:
     """
     Create initial RAG state from user query.
 
     Args:
         query: User's question
         conversation_id: Optional conversation tracking ID
+        user_id: Optional user identifier for memory
 
     Returns:
         Initialized RAGState with defaults
@@ -123,7 +134,14 @@ def create_initial_state(query: str, conversation_id: str | None = None) -> RAGS
         # Input
         query=query,
         conversation_id=conversation_id,
+        user_id=user_id,
         user_context=None,
+        # Memory & Context
+        conversation_history=[],
+        conversation_context_summary="",
+        user_memories=[],
+        user_profile={},
+        user_context_summary="",
         # Query Analysis
         intent="",
         ai_domain=None,

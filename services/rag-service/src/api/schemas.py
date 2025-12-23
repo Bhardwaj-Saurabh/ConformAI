@@ -11,6 +11,9 @@ class QueryRequest(BaseModel):
     conversation_id: str | None = Field(
         default=None, description="Optional conversation tracking ID"
     )
+    user_id: str | None = Field(
+        default=None, description="Optional user identifier for memory persistence"
+    )
     filters: dict[str, str] | None = Field(
         default=None,
         description="Optional metadata filters (regulation, domain, risk_category)",

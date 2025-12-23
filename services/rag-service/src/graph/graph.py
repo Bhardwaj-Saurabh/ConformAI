@@ -7,6 +7,12 @@ from graph.nodes.analysis import (
     decompose_query,
     safety_check,
 )
+from graph.nodes.memory import (
+    extract_user_memories,
+    retrieve_conversation_context,
+    retrieve_user_memory,
+    store_conversation_message,
+)
 from graph.nodes.react_agent import (
     react_act,
     react_observe,
@@ -20,6 +26,7 @@ from graph.nodes.validation import validate_grounding
 from graph.state import RAGState
 from langgraph.graph import END, StateGraph
 
+from shared.memory.checkpointer import get_checkpointer
 from shared.utils.logger import get_logger
 from shared.utils.opik_tracer import track_rag_pipeline
 
@@ -160,9 +167,10 @@ def build_rag_graph() -> StateGraph:
     Build the complete agentic RAG graph.
 
     Graph structure:
-    1. Query Analysis → Decomposition → Safety Check
-    2. ReAct Loop: Plan → Act → Observe → (loop or continue)
-    3. Synthesis → Validation → Format Response
+    1. Memory Retrieval → Conversation Context → User Memory
+    2. Query Analysis → Decomposition → Safety Check
+    3. ReAct Loop: Plan → Act → Observe → (loop or continue)
+    4. Synthesis → Validation → Memory Storage → Format Response
 
     Returns:
         Compiled LangGraph workflow
@@ -172,6 +180,10 @@ def build_rag_graph() -> StateGraph:
     workflow = StateGraph(RAGState)
 
     # ===== Add Nodes =====
+
+    # Memory retrieval phase
+    workflow.add_node("retrieve_conversation_context", retrieve_conversation_context)
+    workflow.add_node("retrieve_user_memory", retrieve_user_memory)
 
     # Analysis phase
     workflow.add_node("analyze_query", analyze_query)
@@ -186,12 +198,22 @@ def build_rag_graph() -> StateGraph:
     # Synthesis and validation
     workflow.add_node("synthesize_answer", synthesize_answer)
     workflow.add_node("validate_grounding", validate_grounding)
+
+    # Memory storage phase
+    workflow.add_node("store_conversation_message", store_conversation_message)
+    workflow.add_node("extract_user_memories", extract_user_memories)
+
+    # Final formatting
     workflow.add_node("format_response", format_response)
 
     # ===== Define Edges =====
 
-    # Entry point
-    workflow.set_entry_point("analyze_query")
+    # Entry point - Start with memory retrieval
+    workflow.set_entry_point("retrieve_conversation_context")
+
+    # Memory retrieval flow
+    workflow.add_edge("retrieve_conversation_context", "retrieve_user_memory")
+    workflow.add_edge("retrieve_user_memory", "analyze_query")
 
     # Analysis flow
     workflow.add_edge("analyze_query", "decompose_query")
@@ -229,10 +251,14 @@ def build_rag_graph() -> StateGraph:
         "validate_grounding",
         should_regenerate,
         {
-            "success": "format_response",
+            "success": "store_conversation_message",
             "regenerate": "validate_grounding",  # Shouldn't reach here
         },
     )
+
+    # Memory storage flow
+    workflow.add_edge("store_conversation_message", "extract_user_memories")
+    workflow.add_edge("extract_user_memories", "format_response")
 
     # Format and end
     workflow.add_edge("format_response", END)
@@ -244,13 +270,22 @@ def build_rag_graph() -> StateGraph:
 
 def compile_rag_graph() -> StateGraph:
     """
-    Compile the RAG graph for execution.
+    Compile the RAG graph for execution with persistent checkpointing.
 
     Returns:
-        Compiled LangGraph workflow ready for invocation
+        Compiled LangGraph workflow ready for invocation with memory persistence
     """
     workflow = build_rag_graph()
-    compiled = workflow.compile()
+
+    # Get PostgreSQL checkpointer for persistent state
+    checkpointer = get_checkpointer()
+
+    if checkpointer:
+        logger.info("Compiling RAG graph with PostgreSQL checkpointer for persistent memory")
+        compiled = workflow.compile(checkpointer=checkpointer)
+    else:
+        logger.warning("PostgreSQL checkpointer not available - compiling without persistence")
+        compiled = workflow.compile()
 
     logger.info("RAG graph compiled and ready")
 
@@ -261,20 +296,27 @@ def compile_rag_graph() -> StateGraph:
 
 
 @track_rag_pipeline("eu_compliance_rag")
-async def run_rag_pipeline(query: str, conversation_id: str | None = None) -> RAGState:
+async def run_rag_pipeline(
+    query: str,
+    conversation_id: str | None = None,
+    user_id: str | None = None,
+) -> RAGState:
     """
-    Run the complete RAG pipeline on a query.
+    Run the complete RAG pipeline on a query with memory persistence.
 
     Args:
         query: User's compliance question
         conversation_id: Optional conversation tracking ID
+        user_id: Optional user identifier for memory persistence
 
     Returns:
         Final RAG state with answer
 
     Example:
         result = await run_rag_pipeline(
-            "What are the obligations for high-risk AI systems in recruitment?"
+            query="What are the obligations for high-risk AI systems in recruitment?",
+            conversation_id="conv-123",
+            user_id="user-456"
         )
         print(result["final_answer"])
     """
@@ -300,13 +342,15 @@ async def run_rag_pipeline(query: str, conversation_id: str | None = None) -> RA
             "query": query,
             "query_length": len(query),
             "conversation_id": conversation_id,
+            "user_id": user_id,
+            "has_memory_context": bool(conversation_id and user_id),
             "timestamp": time.time(),
         },
     )
 
-    # Create initial state
-    logger.debug("Creating initial state")
-    initial_state = create_initial_state(query, conversation_id)
+    # Create initial state with user context
+    logger.debug("Creating initial state with memory context")
+    initial_state = create_initial_state(query, conversation_id, user_id)
 
     logger.debug(
         "Initial state created",
