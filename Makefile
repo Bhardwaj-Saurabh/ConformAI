@@ -58,26 +58,26 @@ format:
 
 # Docker
 docker-up:
-	docker-compose up -d
+	docker-compose -f infrastructure/docker-compose.yml up -d
 
 docker-down:
-	docker-compose down
+	docker-compose -f infrastructure/docker-compose.yml down
 
 docker-logs:
-	docker-compose logs -f
+	docker-compose -f infrastructure/docker-compose.yml logs -f
 
 docker-ps:
-	docker-compose ps
+	docker-compose -f infrastructure/docker-compose.yml ps
 
 docker-rebuild:
-	docker-compose up -d --build
+	docker-compose -f infrastructure/docker-compose.yml up -d --build
 
 # Airflow
 airflow-init:
-	docker-compose exec airflow-webserver airflow db migrate
+	docker-compose -f infrastructure/docker-compose.yml exec airflow-webserver airflow db migrate
 
 airflow-user:
-	docker-compose exec airflow-webserver airflow users create \
+	docker-compose -f infrastructure/docker-compose.yml exec airflow-webserver airflow users create \
 		--username admin \
 		--firstname Admin \
 		--lastname User \

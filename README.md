@@ -253,19 +253,35 @@ kubectl scale deployment rag-service --replicas=3 -n conformai
 ## Documentation
 
 ### Architecture & Planning
+- [System Architecture](docs/ARCHITECTURE.md) - Complete system architecture with Mermaid diagrams
+- [Getting Started Guide](docs/GETTING_STARTED.md) - Comprehensive getting started guide
 - [Technical Implementation Plan](TECHNICAL_IMPLEMENTATION_PLAN.md)
 - [Project Roadmap](CLAUDE.md)
-- [Production Readiness Checklist](PRODUCTION_READINESS.md)
+
+### Infrastructure & Deployment
+- [Docker Compose Setup](infrastructure/docker-compose.yml) - Local development environment
+- [Kubernetes Manifests](infrastructure/k8s/) - Production deployment on Azure AKS
+- [GitHub Secrets Setup](docs/GITHUB_SECRETS_SETUP.md) - CI/CD secrets configuration
+- [Secrets Quick Reference](docs/SECRETS_QUICK_REFERENCE.md) - Quick setup commands
 
 ### Airflow & Data Pipeline
-- [Airflow Quick Start Guide](AIRFLOW_QUICKSTART.md) - Get started in 5 minutes
+- [Airflow Quick Start Guide](docs/AIRFLOW_QUICKSTART.md) - Get started in 5 minutes
 - [Airflow Setup & Documentation](airflow/README.md) - Comprehensive guide
-- [Airflow Implementation Summary](AIRFLOW_IMPLEMENTATION_SUMMARY.md)
-- [Data Pipeline Logging Summary](DATA_PIPELINE_LOGGING_SUMMARY.md)
+- [Airflow Implementation Summary](docs/AIRFLOW_IMPLEMENTATION_SUMMARY.md)
+- [Data Pipeline Logging Summary](docs/DATA_PIPELINE_LOGGING_SUMMARY.md)
+
+### Testing & Quality
+- [Testing Guide](docs/TESTING.md) - Unit, integration, and E2E tests
+- [Security Documentation](docs/SECURITY.md) - Security best practices
 
 ### Logging & Observability
-- [Complete Logging Guide](LOGGING_GUIDE.md) - RAG + Data Pipeline
-- [RAG Logging Implementation](LOGGING_IMPLEMENTATION_SUMMARY.md)
+- [Complete Logging Guide](docs/LOGGING_GUIDE.md) - RAG + Data Pipeline
+- [RAG Logging Implementation](docs/LOGGING_IMPLEMENTATION_SUMMARY.md)
+- [Production Improvements Summary](docs/PRODUCTION_IMPROVEMENTS_SUMMARY.md)
+
+### Evaluation
+- [Opik Evaluation System](shared/evaluation/README.md) - Evaluation datasets and metrics
+- [Run Evaluation Script](scripts/run_evaluation.py) - CLI tool for running evaluations
 
 ### API Documentation
 - [Interactive API Docs](http://localhost:8000/docs) (when running)
