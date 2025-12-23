@@ -1,0 +1,305 @@
+name: Deploy to Azure AKS
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+        default: staging
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*'
+
+env:
+  AZURE_RESOURCE_GROUP: conformai-rg
+  AKS_CLUSTER_NAME: conformai-aks
+  NAMESPACE: conformai
+
+jobs:
+  build-and-push:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Azure Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.ACR_LOGIN_SERVER }}/conformai
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push API Gateway
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./services/api-gateway/Dockerfile
+          push: true
+          tags: ${{ secrets.ACR_LOGIN_SERVER }}/conformai-api-gateway:${{ github.sha }},${{ secrets.ACR_LOGIN_SERVER }}/conformai-api-gateway:latest
+          cache-from: type=registry,ref=${{ secrets.ACR_LOGIN_SERVER }}/conformai-api-gateway:buildcache
+          cache-to: type=registry,ref=${{ secrets.ACR_LOGIN_SERVER }}/conformai-api-gateway:buildcache,mode=max
+
+      - name: Build and push RAG Service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./services/rag-service/Dockerfile
+          push: true
+          tags: ${{ secrets.ACR_LOGIN_SERVER }}/conformai-rag-service:${{ github.sha }},${{ secrets.ACR_LOGIN_SERVER }}/conformai-rag-service:latest
+          cache-from: type=registry,ref=${{ secrets.ACR_LOGIN_SERVER }}/conformai-rag-service:buildcache
+          cache-to: type=registry,ref=${{ secrets.ACR_LOGIN_SERVER }}/conformai-rag-service:buildcache,mode=max
+
+      - name: Build and push Retrieval Service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./services/retrieval-service/Dockerfile
+          push: true
+          tags: ${{ secrets.ACR_LOGIN_SERVER }}/conformai-retrieval-service:${{ github.sha }},${{ secrets.ACR_LOGIN_SERVER }}/conformai-retrieval-service:latest
+          cache-from: type=registry,ref=${{ secrets.ACR_LOGIN_SERVER }}/conformai-retrieval-service:buildcache
+          cache-to: type=registry,ref=${{ secrets.ACR_LOGIN_SERVER }}/conformai-retrieval-service:buildcache,mode=max
+
+      - name: Build and push Airflow
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./airflow/Dockerfile
+          push: true
+          tags: ${{ secrets.ACR_LOGIN_SERVER }}/conformai-airflow:${{ github.sha }},${{ secrets.ACR_LOGIN_SERVER }}/conformai-airflow:latest
+          cache-from: type=registry,ref=${{ secrets.ACR_LOGIN_SERVER }}/conformai-airflow:buildcache
+          cache-to: type=registry,ref=${{ secrets.ACR_LOGIN_SERVER }}/conformai-airflow:buildcache,mode=max
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event.inputs.environment == 'staging' || (github.ref == 'refs/heads/master' && github.event_name == 'push')
+    environment:
+      name: staging
+      url: https://staging.conformai.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set AKS context
+        uses: azure/aks-set-context@v3
+        with:
+          resource-group: ${{ env.AZURE_RESOURCE_GROUP }}
+          cluster-name: ${{ env.AKS_CLUSTER_NAME }}
+
+      - name: Create namespace if not exists
+        run: |
+          kubectl create namespace ${{ env.NAMESPACE }}-staging --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create Kubernetes secrets
+        run: |
+          kubectl create secret generic conformai-secrets \
+            --from-literal=openai-api-key="${{ secrets.OPENAI_API_KEY }}" \
+            --from-literal=anthropic-api-key="${{ secrets.ANTHROPIC_API_KEY }}" \
+            --from-literal=opik-api-key="${{ secrets.OPIK_API_KEY }}" \
+            --from-literal=postgres-password="${{ secrets.POSTGRES_PASSWORD }}" \
+            --from-literal=qdrant-api-key="${{ secrets.QDRANT_API_KEY }}" \
+            --from-literal=s3-access-key="${{ secrets.S3_ACCESS_KEY }}" \
+            --from-literal=s3-secret-key="${{ secrets.S3_SECRET_KEY }}" \
+            --from-literal=airflow-fernet-key="${{ secrets.AIRFLOW_FERNET_KEY }}" \
+            --from-literal=airflow-webserver-secret="${{ secrets.AIRFLOW_WEBSERVER_SECRET_KEY }}" \
+            --from-literal=jwt-secret-key="${{ secrets.JWT_SECRET_KEY }}" \
+            --namespace ${{ env.NAMESPACE }}-staging \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create ConfigMap
+        run: |
+          kubectl create configmap conformai-config \
+            --from-literal=comet-workspace="${{ secrets.COMET_WORKSPACE }}" \
+            --from-literal=opik-project-name="conformai-staging" \
+            --from-literal=opik-url="https://www.comet.com/opik/api" \
+            --from-literal=opik-enabled="true" \
+            --from-literal=environment="staging" \
+            --from-literal=log-level="INFO" \
+            --from-literal=llm-provider="openai" \
+            --from-literal=llm-model="gpt-4o-mini" \
+            --namespace ${{ env.NAMESPACE }}-staging \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy to AKS
+        run: |
+          # Update image tags in manifests
+          sed -i "s|ACR_LOGIN_SERVER|${{ secrets.ACR_LOGIN_SERVER }}|g" k8s/staging/*.yaml
+          sed -i "s|IMAGE_TAG|${{ github.sha }}|g" k8s/staging/*.yaml
+
+          # Apply Kubernetes manifests
+          kubectl apply -f k8s/staging/ -n ${{ env.NAMESPACE }}-staging
+
+      - name: Wait for deployment rollout
+        run: |
+          kubectl rollout status deployment/api-gateway -n ${{ env.NAMESPACE }}-staging --timeout=10m
+          kubectl rollout status deployment/rag-service -n ${{ env.NAMESPACE }}-staging --timeout=10m
+          kubectl rollout status deployment/retrieval-service -n ${{ env.NAMESPACE }}-staging --timeout=10m
+
+      - name: Run smoke tests
+        run: |
+          # Get LoadBalancer IP
+          export API_URL=$(kubectl get svc api-gateway -n ${{ env.NAMESPACE }}-staging -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+          # Health check
+          curl -f http://${API_URL}/health || exit 1
+
+          echo "✅ Staging deployment successful!"
+          echo "API URL: http://${API_URL}"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event.inputs.environment == 'production' || startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: production
+      url: https://conformai.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set AKS context
+        uses: azure/aks-set-context@v3
+        with:
+          resource-group: ${{ env.AZURE_RESOURCE_GROUP }}
+          cluster-name: ${{ env.AKS_CLUSTER_NAME }}
+
+      - name: Create namespace if not exists
+        run: |
+          kubectl create namespace ${{ env.NAMESPACE }}-prod --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create Kubernetes secrets
+        run: |
+          kubectl create secret generic conformai-secrets \
+            --from-literal=openai-api-key="${{ secrets.OPENAI_API_KEY }}" \
+            --from-literal=anthropic-api-key="${{ secrets.ANTHROPIC_API_KEY }}" \
+            --from-literal=opik-api-key="${{ secrets.OPIK_API_KEY }}" \
+            --from-literal=postgres-password="${{ secrets.POSTGRES_PASSWORD_PROD }}" \
+            --from-literal=qdrant-api-key="${{ secrets.QDRANT_API_KEY_PROD }}" \
+            --from-literal=s3-access-key="${{ secrets.S3_ACCESS_KEY }}" \
+            --from-literal=s3-secret-key="${{ secrets.S3_SECRET_KEY }}" \
+            --from-literal=airflow-fernet-key="${{ secrets.AIRFLOW_FERNET_KEY }}" \
+            --from-literal=airflow-webserver-secret="${{ secrets.AIRFLOW_WEBSERVER_SECRET_KEY }}" \
+            --from-literal=jwt-secret-key="${{ secrets.JWT_SECRET_KEY_PROD }}" \
+            --namespace ${{ env.NAMESPACE }}-prod \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create ConfigMap
+        run: |
+          kubectl create configmap conformai-config \
+            --from-literal=comet-workspace="${{ secrets.COMET_WORKSPACE }}" \
+            --from-literal=opik-project-name="conformai-production" \
+            --from-literal=opik-url="https://www.comet.com/opik/api" \
+            --from-literal=opik-enabled="true" \
+            --from-literal=environment="production" \
+            --from-literal=log-level="WARNING" \
+            --from-literal=llm-provider="openai" \
+            --from-literal=llm-model="gpt-4o" \
+            --namespace ${{ env.NAMESPACE }}-prod \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy to AKS (Blue-Green)
+        run: |
+          # Update image tags in manifests
+          sed -i "s|ACR_LOGIN_SERVER|${{ secrets.ACR_LOGIN_SERVER }}|g" k8s/production/*.yaml
+          sed -i "s|IMAGE_TAG|${{ github.sha }}|g" k8s/production/*.yaml
+
+          # Apply Kubernetes manifests
+          kubectl apply -f k8s/production/ -n ${{ env.NAMESPACE }}-prod
+
+      - name: Wait for deployment rollout
+        run: |
+          kubectl rollout status deployment/api-gateway -n ${{ env.NAMESPACE }}-prod --timeout=15m
+          kubectl rollout status deployment/rag-service -n ${{ env.NAMESPACE }}-prod --timeout=15m
+          kubectl rollout status deployment/retrieval-service -n ${{ env.NAMESPACE }}-prod --timeout=15m
+
+      - name: Run production smoke tests
+        run: |
+          # Get LoadBalancer IP
+          export API_URL=$(kubectl get svc api-gateway -n ${{ env.NAMESPACE }}-prod -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+          # Health check
+          curl -f http://${API_URL}/health || exit 1
+
+          # Readiness check
+          curl -f http://${API_URL}/ready || exit 1
+
+          echo "✅ Production deployment successful!"
+          echo "API URL: http://${API_URL}"
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "🚀 Production deployment completed successfully"
+          echo "Version: ${{ github.sha }}"
+          echo "Tag: ${{ github.ref_name }}"
+
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    if: failure() && (needs.deploy-staging.result == 'failure' || needs.deploy-production.result == 'failure')
+    needs: [deploy-staging, deploy-production]
+
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set AKS context
+        uses: azure/aks-set-context@v3
+        with:
+          resource-group: ${{ env.AZURE_RESOURCE_GROUP }}
+          cluster-name: ${{ env.AKS_CLUSTER_NAME }}
+
+      - name: Rollback to previous version
+        run: |
+          NAMESPACE="${{ github.event.inputs.environment == 'production' && 'conformai-prod' || 'conformai-staging' }}"
+
+          kubectl rollout undo deployment/api-gateway -n $NAMESPACE
+          kubectl rollout undo deployment/rag-service -n $NAMESPACE
+          kubectl rollout undo deployment/retrieval-service -n $NAMESPACE
+
+          echo "⚠️ Rollback initiated for $NAMESPACE"

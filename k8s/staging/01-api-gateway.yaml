@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  labels:
+    app: conformai
+    component: api-gateway
+    environment: staging
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: conformai
+      component: api-gateway
+  template:
+    metadata:
+      labels:
+        app: conformai
+        component: api-gateway
+        environment: staging
+    spec:
+      containers:
+      - name: api-gateway
+        image: ACR_LOGIN_SERVER/conformai-api-gateway:IMAGE_TAG
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        env:
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: conformai-config
+              key: environment
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: conformai-config
+              key: log-level
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: conformai-secrets
+              key: openai-api-key
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: conformai-secrets
+              key: anthropic-api-key
+        - name: OPIK_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: conformai-secrets
+              key: opik-api-key
+        - name: COMET_WORKSPACE
+          valueFrom:
+            configMapKeyRef:
+              name: conformai-config
+              key: comet-workspace
+        - name: OPIK_PROJECT_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: conformai-config
+              key: opik-project-name
+        - name: OPIK_URL
+          valueFrom:
+            configMapKeyRef:
+              name: conformai-config
+              key: opik-url
+        - name: OPIK_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: conformai-config
+              key: opik-enabled
+        - name: RAG_SERVICE_URL
+          value: "http://rag-service:8001"
+        - name: RETRIEVAL_SERVICE_URL
+          value: "http://retrieval-service:8002"
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: conformai-secrets
+              key: jwt-secret-key
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  labels:
+    app: conformai
+    component: api-gateway
+spec:
+  type: LoadBalancer
+  selector:
+    app: conformai
+    component: api-gateway
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  sessionAffinity: ClientIP

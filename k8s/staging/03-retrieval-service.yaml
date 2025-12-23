@@ -1,0 +1,133 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: retrieval-service
+  labels:
+    app: conformai
+    component: retrieval-service
+    environment: staging
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: conformai
+      component: retrieval-service
+  template:
+    metadata:
+      labels:
+        app: conformai
+        component: retrieval-service
+        environment: staging
+    spec:
+      containers:
+      - name: retrieval-service
+        image: ACR_LOGIN_SERVER/conformai-retrieval-service:IMAGE_TAG
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        env:
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: conformai-config
+              key: environment
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: conformai-config
+              key: log-level
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: conformai-secrets
+              key: openai-api-key
+        - name: QDRANT_URL
+          value: "http://qdrant:6333"
+        - name: QDRANT_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: conformai-secrets
+              key: qdrant-api-key
+              optional: true
+        - name: REDIS_URL
+          value: "redis://redis:6379/0"
+        - name: DATABASE_URL
+          value: "postgresql://conformai:$(POSTGRES_PASSWORD)@postgres:5432/conformai"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: conformai-secrets
+              key: postgres-password
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: retrieval-service
+  labels:
+    app: conformai
+    component: retrieval-service
+spec:
+  type: ClusterIP
+  selector:
+    app: conformai
+    component: retrieval-service
+  ports:
+  - port: 8002
+    targetPort: 8000
+    protocol: TCP
+    name: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: retrieval-service-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: retrieval-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
